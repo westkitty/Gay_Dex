@@ -13,6 +13,27 @@
   const { clamp, damp } = C.util;
   const $ = (s) => document.querySelector(s);
 
+  /**
+   * Explain, visibly, why the 3D world is unavailable.
+   *
+   * The notice lives outside #circuitRoot (which is [hidden] in this state) —
+   * nesting it inside the world root, as it once was, meant nobody without
+   * WebGL2 ever read it. It is dismissible and never blocks the static
+   * terminal, which is fully functional.
+   */
+  function showFallback(reason) {
+    const fb = document.querySelector('#circuitFallback');
+    if (!fb) return;
+    fb.dataset.reason = String(reason || 'unavailable');
+    fb.innerHTML = '<strong>Circuit offline — this browser has no WebGL2.</strong>'
+      + `<br>Reported: ${reason ? String(reason) : 'unsupported'}.`
+      + '<br>The 3D world is the only thing missing. The atlas, Lineage Atlas, Compare Deck, Evolution Lab and Battle Terminal below all work exactly as normal.'
+      + '<div class="circuit-fallback-actions"><button type="button" class="circuit-btn primary" id="circuitFallbackClose">Continue without 3D</button></div>';
+    fb.hidden = false;
+    const close = fb.querySelector('#circuitFallbackClose');
+    if (close) close.addEventListener('click', () => { fb.hidden = true; });
+  }
+
   function detectSupport() {
     if (!C.hasThree()) return { ok: false, reason: 'three.js did not load' };
     if (typeof document === 'undefined') return { ok: false, reason: 'no document' };
@@ -59,11 +80,16 @@
 
     if (!support.ok) {
       if (pill) pill.innerHTML = '3D <strong>static fallback</strong>';
-      if (enterBtn) { enterBtn.disabled = true; enterBtn.textContent = '⬢ Circuit unavailable'; enterBtn.title = support.reason; }
+      // Stay clickable: a disabled control hides the only explanation a user
+      // would get. Clicking now re-opens the notice.
+      if (enterBtn) {
+        enterBtn.disabled = false;
+        enterBtn.innerHTML = '⬢ <strong>Why is 3D off?</strong>';
+        enterBtn.addEventListener('click', () => showFallback(support.reason));
+      }
       const st = $('#engineStatus');
       if (st) st.textContent = 'HOLO ENGINE: STATIC FALLBACK';
-      const fb = $('#circuitFallback');
-      if (fb) { fb.hidden = false; fb.innerHTML = `<strong>Circuit offline.</strong> ${support.reason}. The full GayDex atlas, Lineage Atlas, comparison deck, Evolution Lab and Battle Terminal below are unaffected — nothing is lost, only the 3D world.`; }
+      showFallback(support.reason);
       return null;
     }
 
@@ -205,6 +231,8 @@
 
     /* ---- interaction --------------------------------------------------- */
     let inspecting = null;
+    /** Element that opened the inspector, so focus can be handed back. */
+    let inspectorReturnFocus = null;
 
     function handleInteract(kind, id) {
       if (kind === 'specimen') { openInspector(id); return; }
@@ -240,16 +268,28 @@
       if (pos) flyTo(pos[0] + 6.5, pos[1] + 8.5, e.name, { yaw: Math.atan2(pos[0] - (pos[0] + 6.5), pos[1] - (pos[1] + 8.5)), dur: 0.8 });
       renderInspector(e);
       const panel = $('#circuitInspector');
-      if (panel) { panel.hidden = false; const c = $('#circuitInspectorClose'); if (c) c.focus(); }
+      if (panel) {
+        // Remember where focus came from so closing the dialog gives it back
+        // instead of dumping the user at the top of the document.
+        if (panel.hidden) inspectorReturnFocus = document.activeElement;
+        panel.hidden = false;
+        const c = $('#circuitInspectorClose');
+        if (c) c.focus();
+      }
     }
 
     function closeInspector() {
       if (inspecting) specimens.setInspecting(inspecting, false);
       inspecting = null;
       const panel = $('#circuitInspector');
+      const wasOpen = panel && !panel.hidden;
       if (panel) panel.hidden = true;
       input.clearTarget();
       renderPrompt(null, null);
+      if (wasOpen && inspectorReturnFocus && typeof inspectorReturnFocus.focus === 'function' && document.contains(inspectorReturnFocus)) {
+        inspectorReturnFocus.focus();
+      }
+      inspectorReturnFocus = null;
     }
 
     function renderInspector(e) {
@@ -829,6 +869,7 @@
 
   C.boot = boot;
   C.detectSupport = detectSupport;
+  C.showFallback = showFallback;
 })(window.GayDexCircuit);
 
 /* ---------------------------------------------------------------------------
@@ -849,11 +890,7 @@
       const root = document.querySelector('#circuitRoot');
       if (root) root.hidden = true;
       document.body.classList.remove('circuit-on');
-      const fb = document.querySelector('#circuitFallback');
-      if (fb) {
-        fb.hidden = false;
-        fb.innerHTML = '<strong>Circuit failed to start.</strong> The GayDex atlas, comparison deck, Evolution Lab and Battle Terminal below are fully functional.';
-      }
+      showFallback(`startup error: ${(err && err.message) || err}`);
       const pill = document.querySelector('#enginePill');
       if (pill) pill.innerHTML = '3D <strong>static fallback</strong>';
       window.dispatchEvent(new CustomEvent('gaydex:circuit-ready', { detail: window.GayDexCircuitState }));

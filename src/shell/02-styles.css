@@ -255,3 +255,46 @@
 .circuit-enter{cursor:pointer;border-color:var(--cyan)}
 body.circuit-on main.wrap,body.circuit-on header.wrap.topbar,body.circuit-on footer.wrap{visibility:hidden;pointer-events:none}
 body.circuit-reduced .circuit-toast{transition:none}
+
+/* ===== Loop 2: observation lattice, quick filters, axis legend ===== */
+.toolbar{grid-template-columns:minmax(0,1fr) 170px 160px auto auto}
+.quick-filters{display:flex;gap:6px;flex-wrap:wrap;grid-column:1/-1;justify-content:flex-start}
+.btn.quick{padding:8px 11px;font-size:12px;background:#12122a}
+.btn.quick[aria-pressed="true"]{border-color:var(--cyan);background:linear-gradient(180deg,rgba(66,231,255,.16),rgba(66,231,255,.05));color:#fff}
+.dex-lattice{margin:0 0 16px;padding:12px 14px;display:grid;gap:10px}
+.lattice-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.lattice-head strong{font-size:15px}
+.lattice-note{color:var(--muted);font-size:11.5px}
+.lattice-dots{display:flex;flex-wrap:wrap;gap:6px}
+.lattice-dot{position:relative;width:34px;height:34px;border-radius:11px;border:1px solid var(--line);background:#0c0e20;cursor:pointer;display:grid;place-items:center;font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);transition:.16s transform,.16s border-color}
+.lattice-dot i{position:absolute;inset:4px;border-radius:8px;background:var(--dotColor,var(--cyan));opacity:.16;transition:opacity .2s ease,box-shadow .2s ease}
+.lattice-dot span{position:relative;z-index:1}
+.lattice-dot.seen i{opacity:.95;box-shadow:0 0 14px var(--dotColor,var(--cyan))}
+.lattice-dot.seen span{color:#080912;font-weight:900}
+.lattice-dot.selected{outline:3px solid var(--cyan);outline-offset:2px}
+.lattice-dot:hover{transform:translateY(-2px);border-color:var(--dotColor,var(--cyan))}
+.dex-lattice.complete{border-color:var(--gold);box-shadow:0 0 0 1px rgba(255,193,74,.35) inset,var(--shadow)}
+.dex-lattice.complete .lattice-head strong{color:var(--gold)}
+.axis-legend{margin-top:14px;border:1px solid var(--line);border-radius:14px;background:#101021;padding:10px 12px}
+.axis-legend summary{cursor:pointer;font-weight:800;font-size:12.5px;letter-spacing:.02em}
+.axis-legend summary::marker{color:var(--cyan)}
+.axis-legend-hint{color:var(--muted);font-weight:600}
+.axis-legend-body{margin-top:10px;color:#d3cde6;font-size:12.5px;line-height:1.55}
+.axis-legend-body p{margin:0 0 8px}
+.axis-list{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:4px}
+.axis-list li{display:flex;gap:8px;align-items:baseline;border-bottom:1px dashed rgba(120,130,180,.18);padding-bottom:3px}
+.axis-list b{min-width:74px;color:#fff}
+.axis-list span{color:var(--muted)}
+.axis-legend b{color:#fff}
+@media(max-width:980px){.toolbar{grid-template-columns:1fr 1fr}.quick-filters{grid-column:1/-1}.lattice-dot{width:32px;height:32px}}
+@media(pointer:coarse){.lattice-dot{width:38px;height:38px}}
+@media(prefers-reduced-motion:reduce){.lattice-dot{transition:none}}
+/* Leader marking in the Compare Deck: the strongest pinned value on each axis
+   is called out, so a three-way comparison is readable at a glance. */
+.mini-stat.lead{color:#eae4ff}
+.mini-stat.lead strong{color:#fff}
+.mini-stat.lead .mini-track i{box-shadow:0 0 10px color-mix(in srgb,var(--nodeColor,var(--cyan)) 60%,transparent)}
+.mini-stat.lead span:first-child{color:var(--nodeColor,var(--cyan));font-weight:800}
+.compare-card.lead-card{border-color:color-mix(in srgb,var(--nodeColor,var(--cyan)) 45%,var(--line))}
+.circuit-fallback-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.circuit-fallback .circuit-btn{font-family:inherit}
