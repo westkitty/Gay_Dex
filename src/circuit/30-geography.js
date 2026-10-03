@@ -56,6 +56,7 @@
     const disposables = [];
     const track = (x) => { disposables.push(x); return x; };
     const updaters = [];
+    function addUpdater(scope, fn) { updaters.push({ scope, fn }); }
 
     /* ==================================================================== *
      * FOUNDATION — ground, sky, light, nexus, spokes
@@ -249,12 +250,15 @@
       orb.position.y = 10.6;
       nexus.add(orb);
 
-      updaters.push((dt, t, anim) => {
+      addUpdater('nexus', (dt, t, anim) => {
         orb.rotation.y += dt * 0.35 * anim;
         orb.rotation.x += dt * 0.17 * anim;
         pylon.rotation.y -= dt * 0.12 * anim;
         for (const g of gateways) {
-          g.mat.emissiveIntensity = 0.65 + Math.sin(t * 1.6 + g.angle * 2) * 0.28 * anim;
+          const focus = g.id === activeDistrict ? focusPulse : 0;
+          g.mat.emissiveIntensity = 0.65 + Math.sin(t * 1.6 + g.angle * 2) * 0.28 * anim + focus * 2.6;
+          const scale = 1 + focus * 0.12;
+          g.arch.scale.setScalar(scale);
         }
       });
       nexus.userData.gateways = gateways;
@@ -350,7 +354,7 @@
       lab.group.rotation.y = 0.6;
       g.add(lab.group);
 
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('prism', (dt, t, anim, q) => {
         dome.rotation.y += dt * 0.028 * anim;
         shell.rotation.y -= dt * 0.045 * anim;
         domeMat.opacity = 0.15 + Math.sin(t * 0.8) * 0.05 * anim;
@@ -432,7 +436,7 @@
 
       const motes = makeMotes(g, 0x8fe6ff, 150, 26, 10);
 
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('aqua', (dt, t, anim, q) => {
         water.material.uniforms.uTime.value = t;
         water.material.uniforms.uAnim.value = anim;
         motes.update(dt, t, anim, q);
@@ -548,7 +552,8 @@
       }
 
       let hype = 0;
-      updaters.push((dt, t, anim, q) => {
+      let crowdAccum = 0;
+      addUpdater('pride', (dt, t, anim, q) => {
         arenaLight.intensity = 18 + hype * 34 + Math.sin(t * 2.1) * 2 * anim;
         arenaLight.color.setHex(hype > 0.99 ? 0xffffff : col);
         for (const r of rings) {
@@ -562,7 +567,12 @@
           c.mesh.rotation.y = Math.sin(t * 0.5 + c.a) * 0.25 * anim;
         }
         floor.material.emissiveIntensity = 0.18 + hype * 0.7;
-        layoutCrowd(q.crowd, t, anim, hype);
+        crowdAccum += dt;
+        const crowdStep = q.crowd <= 90 ? 1 / 12 : 1 / 30;
+        if (crowdAccum >= crowdStep) {
+          layoutCrowd(q.crowd, t, anim, hype);
+          crowdAccum = 0;
+        }
       });
 
       return {
@@ -672,7 +682,7 @@
       }
 
       let recovery = 0;
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('emerald', (dt, t, anim, q) => {
         for (const p of pylons) {
           const w = (t * 0.22 * anim + p.phase) % 1;
           p.mat.opacity = 0.18 + Math.pow(1 - Math.abs(w - 0.5) * 2, 3) * 0.75 + recovery * 0.2;
@@ -709,9 +719,14 @@
       }
       const d = new THREE.Object3D();
       let active = count;
+      let accum = 0;
       return {
         mesh,
         update(dt, t, anim) {
+          accum += dt;
+          const step = anim < 0.3 ? 1 / 15 : 1 / 30;
+          if (accum < step) return;
+          accum = 0;
           for (let i = 0; i < active; i++) {
             const a = seeds[i * 4] + t * 0.12 * seeds[i * 4 + 3] * anim;
             const r = seeds[i * 4 + 1];
@@ -988,6 +1003,8 @@
     /* ---- world-level API ----------------------------------------------- */
     let activeDistrict = 'nexus';
     let ripple = { t: 1, at: new THREE.Vector2(0, 0) };
+    let focusPulse = 0;
+    let updateFrame = 0;
 
     /**
      * Which district owns this point? Nearest district whose radius contains
@@ -1004,24 +1021,52 @@
     }
 
     function setActiveDistrict(id) {
-      activeDistrict = C.DISTRICTS[id] ? id : 'nexus';
+      const next = C.DISTRICTS[id] ? id : 'nexus';
+      const changed = next !== activeDistrict;
+      activeDistrict = next;
       const d = C.DISTRICTS[activeDistrict];
       groundMat.uniforms.uDistrict.value.set(d.center[0], 0, d.center[1]);
       groundMat.uniforms.uDistrictColor.value.setHex(d.color);
+      if (changed) {
+        focusPulse = 1;
+        pulseRipple(d.center[0], d.center[1]);
+      }
     }
 
     function pulseRipple(x, z) { ripple = { t: 0, at: new THREE.Vector2(x, z) }; }
+    function pulseFocus(strength = 1) { focusPulse = Math.max(focusPulse, clamp(strength, 0, 1.5)); }
+    let lastUpdateStats = { activeDistrict: 'nexus', updatersRun: 0, routeNodesUpdated: 0, frame: 0 };
 
     function update(dt, t, anim, q) {
       groundMat.uniforms.uTime.value = t;
+      focusPulse = Math.max(0, focusPulse - dt * 1.8);
+      groundMat.uniforms.uPulse.value = focusPulse * focusPulse;
       if (ripple.t < 1) {
         ripple.t = Math.min(1, ripple.t + dt * 0.85);
         groundMat.uniforms.uRipple.value = ripple.t;
         groundMat.uniforms.uRippleAt.value.copy(ripple.at);
       }
       stars.rotation.y += dt * 0.004 * anim;
-      for (let i = 0; i < updaters.length; i++) updaters[i](dt, t, anim, q);
-      for (const r of Object.values(routes)) for (const n of r.nodes) n.node.update(dt, t, anim);
+      updateFrame++;
+      const inactiveStride = activeDistrict === 'nexus' ? 2 : 8;
+      let updatersRun = 0;
+      for (let i = 0; i < updaters.length; i++) {
+        const u = updaters[i];
+        const hot = u.scope === 'nexus' || u.scope === activeDistrict;
+        if (!hot && updateFrame % inactiveStride !== 0) continue;
+        u.fn(hot ? dt : dt * inactiveStride, t, hot ? anim : anim * 0.45, q);
+        updatersRun++;
+      }
+      let routeNodesUpdated = 0;
+      for (const r of Object.values(routes)) {
+        if (r.district !== activeDistrict && updateFrame % inactiveStride !== 0) continue;
+        const routeAnim = r.district === activeDistrict ? anim : anim * 0.35;
+        for (const n of r.nodes) {
+          n.node.update(dt, t, routeAnim);
+          routeNodesUpdated++;
+        }
+      }
+      lastUpdateStats = { activeDistrict, updatersRun, routeNodesUpdated, frame: updateFrame };
     }
 
     function setQuality(q) {
@@ -1051,8 +1096,9 @@
     return {
       THREE, root, districts, routes,
       buildRoute, districtAt, setActiveDistrict, get activeDistrict() { return activeDistrict; },
-      pulseRipple, update, setQuality, dispose,
+      pulseRipple, pulseFocus, update, setQuality, dispose,
       get updaters() { return updaters.length; },
+      get updateStats() { return { ...lastUpdateStats }; },
       ROUTES,
     };
   }

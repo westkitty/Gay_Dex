@@ -104,6 +104,7 @@
         to: { x, z, yaw },
         t: 0,
         dur: opts2.dur || (reducedWanted() ? 0.01 : 1.15),
+        arc: reducedWanted() ? 0 : (opts2.arc == null ? 4 : opts2.arc),
         label: label || null,
         then: opts2.then || null,
       };
@@ -127,6 +128,7 @@
           f.from.z + (f.to.z - f.from.z) * k,
           f.from.yaw + shortAngle(f.from.yaw, f.to.yaw) * k,
         );
+        runtime.camera.position.y = C.RIG.eyeHeight + Math.sin(Math.PI * k) * f.arc;
         if (f.t >= 1) {
           const then = f.then;
           director.fly = null;
@@ -332,7 +334,12 @@
       if (!d) return;
       flyTo(d.center[0], d.center[1] + (id === 'nexus' ? 24 : 20), d.name, {
         dur: reducedWanted() ? 0.01 : 1.0,
-        then: () => { adapter.prefs.lastDistrict = id; world.pulseRipple(d.center[0], d.center[1]); },
+        arc: id === 'nexus' ? 2.5 : 5.5,
+        then: () => {
+          adapter.prefs.lastDistrict = id;
+          world.pulseRipple(d.center[0], d.center[1]);
+          world.pulseFocus(1);
+        },
       });
       setDistrictCard(id);
     }
@@ -368,6 +375,7 @@
       closeInspector();
       flyTo(d.center[0], d.center[1] + 17.5, 'arena', {
         dur: reducedWanted() ? 0.01 : 1.3,
+        arc: 4.2,
         then: () => {
           adapter.setFighters(me.id, rival.id);
           battle.enter({ entryA: me, entryB: rival });
@@ -388,7 +396,7 @@
       if (hud) hud.hidden = true;
       const s = director.saved;
       if (s) {
-        flyTo(s.x, s.z, 'return', { yaw: s.yaw, dur: reducedWanted() ? 0.01 : 0.9, then: () => { setDistrictCard(s.district); } });
+        flyTo(s.x, s.z, 'return', { yaw: s.yaw, dur: reducedWanted() ? 0.01 : 0.9, arc: 3, then: () => { setDistrictCard(s.district); world.pulseFocus(0.7); } });
       } else {
         input.setEnabled(true);
       }
@@ -598,7 +606,13 @@
     }
 
     /* ---- engine events -> 3D -------------------------------------------- */
-    adapter.on('battle', (ev) => { battle.onEvent(ev); if (ev && ev.kind === 'damage') director.shake = Math.min(1, director.shake + (ev.move === 'signature' ? 0.9 : 0.4)); });
+    adapter.on('battle', (ev) => {
+      battle.onEvent(ev);
+      if (ev && ev.kind === 'damage') {
+        director.shake = Math.min(1, director.shake + (ev.move === 'signature' ? 0.9 : 0.4));
+        if (ev.move === 'signature' || ev.flowBurst) world.pulseFocus(ev.move === 'signature' ? 1.25 : 0.7);
+      }
+    });
     adapter.on('discovery', () => refreshNavigator());
     adapter.on('battleLifecycle', (phase) => { if (phase === 'exit') renderBattleHud(); });
 

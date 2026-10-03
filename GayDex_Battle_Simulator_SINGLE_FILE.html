@@ -6023,6 +6023,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     const disposables = [];
     const track = (x) => { disposables.push(x); return x; };
     const updaters = [];
+    function addUpdater(scope, fn) { updaters.push({ scope, fn }); }
 
     /* ==================================================================== *
      * FOUNDATION — ground, sky, light, nexus, spokes
@@ -6216,12 +6217,15 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       orb.position.y = 10.6;
       nexus.add(orb);
 
-      updaters.push((dt, t, anim) => {
+      addUpdater('nexus', (dt, t, anim) => {
         orb.rotation.y += dt * 0.35 * anim;
         orb.rotation.x += dt * 0.17 * anim;
         pylon.rotation.y -= dt * 0.12 * anim;
         for (const g of gateways) {
-          g.mat.emissiveIntensity = 0.65 + Math.sin(t * 1.6 + g.angle * 2) * 0.28 * anim;
+          const focus = g.id === activeDistrict ? focusPulse : 0;
+          g.mat.emissiveIntensity = 0.65 + Math.sin(t * 1.6 + g.angle * 2) * 0.28 * anim + focus * 2.6;
+          const scale = 1 + focus * 0.12;
+          g.arch.scale.setScalar(scale);
         }
       });
       nexus.userData.gateways = gateways;
@@ -6317,7 +6321,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       lab.group.rotation.y = 0.6;
       g.add(lab.group);
 
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('prism', (dt, t, anim, q) => {
         dome.rotation.y += dt * 0.028 * anim;
         shell.rotation.y -= dt * 0.045 * anim;
         domeMat.opacity = 0.15 + Math.sin(t * 0.8) * 0.05 * anim;
@@ -6399,7 +6403,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
 
       const motes = makeMotes(g, 0x8fe6ff, 150, 26, 10);
 
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('aqua', (dt, t, anim, q) => {
         water.material.uniforms.uTime.value = t;
         water.material.uniforms.uAnim.value = anim;
         motes.update(dt, t, anim, q);
@@ -6515,7 +6519,8 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       }
 
       let hype = 0;
-      updaters.push((dt, t, anim, q) => {
+      let crowdAccum = 0;
+      addUpdater('pride', (dt, t, anim, q) => {
         arenaLight.intensity = 18 + hype * 34 + Math.sin(t * 2.1) * 2 * anim;
         arenaLight.color.setHex(hype > 0.99 ? 0xffffff : col);
         for (const r of rings) {
@@ -6529,7 +6534,12 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
           c.mesh.rotation.y = Math.sin(t * 0.5 + c.a) * 0.25 * anim;
         }
         floor.material.emissiveIntensity = 0.18 + hype * 0.7;
-        layoutCrowd(q.crowd, t, anim, hype);
+        crowdAccum += dt;
+        const crowdStep = q.crowd <= 90 ? 1 / 12 : 1 / 30;
+        if (crowdAccum >= crowdStep) {
+          layoutCrowd(q.crowd, t, anim, hype);
+          crowdAccum = 0;
+        }
       });
 
       return {
@@ -6639,7 +6649,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       }
 
       let recovery = 0;
-      updaters.push((dt, t, anim, q) => {
+      addUpdater('emerald', (dt, t, anim, q) => {
         for (const p of pylons) {
           const w = (t * 0.22 * anim + p.phase) % 1;
           p.mat.opacity = 0.18 + Math.pow(1 - Math.abs(w - 0.5) * 2, 3) * 0.75 + recovery * 0.2;
@@ -6676,9 +6686,14 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       }
       const d = new THREE.Object3D();
       let active = count;
+      let accum = 0;
       return {
         mesh,
         update(dt, t, anim) {
+          accum += dt;
+          const step = anim < 0.3 ? 1 / 15 : 1 / 30;
+          if (accum < step) return;
+          accum = 0;
           for (let i = 0; i < active; i++) {
             const a = seeds[i * 4] + t * 0.12 * seeds[i * 4 + 3] * anim;
             const r = seeds[i * 4 + 1];
@@ -6955,6 +6970,8 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     /* ---- world-level API ----------------------------------------------- */
     let activeDistrict = 'nexus';
     let ripple = { t: 1, at: new THREE.Vector2(0, 0) };
+    let focusPulse = 0;
+    let updateFrame = 0;
 
     /**
      * Which district owns this point? Nearest district whose radius contains
@@ -6971,24 +6988,52 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     }
 
     function setActiveDistrict(id) {
-      activeDistrict = C.DISTRICTS[id] ? id : 'nexus';
+      const next = C.DISTRICTS[id] ? id : 'nexus';
+      const changed = next !== activeDistrict;
+      activeDistrict = next;
       const d = C.DISTRICTS[activeDistrict];
       groundMat.uniforms.uDistrict.value.set(d.center[0], 0, d.center[1]);
       groundMat.uniforms.uDistrictColor.value.setHex(d.color);
+      if (changed) {
+        focusPulse = 1;
+        pulseRipple(d.center[0], d.center[1]);
+      }
     }
 
     function pulseRipple(x, z) { ripple = { t: 0, at: new THREE.Vector2(x, z) }; }
+    function pulseFocus(strength = 1) { focusPulse = Math.max(focusPulse, clamp(strength, 0, 1.5)); }
+    let lastUpdateStats = { activeDistrict: 'nexus', updatersRun: 0, routeNodesUpdated: 0, frame: 0 };
 
     function update(dt, t, anim, q) {
       groundMat.uniforms.uTime.value = t;
+      focusPulse = Math.max(0, focusPulse - dt * 1.8);
+      groundMat.uniforms.uPulse.value = focusPulse * focusPulse;
       if (ripple.t < 1) {
         ripple.t = Math.min(1, ripple.t + dt * 0.85);
         groundMat.uniforms.uRipple.value = ripple.t;
         groundMat.uniforms.uRippleAt.value.copy(ripple.at);
       }
       stars.rotation.y += dt * 0.004 * anim;
-      for (let i = 0; i < updaters.length; i++) updaters[i](dt, t, anim, q);
-      for (const r of Object.values(routes)) for (const n of r.nodes) n.node.update(dt, t, anim);
+      updateFrame++;
+      const inactiveStride = activeDistrict === 'nexus' ? 2 : 8;
+      let updatersRun = 0;
+      for (let i = 0; i < updaters.length; i++) {
+        const u = updaters[i];
+        const hot = u.scope === 'nexus' || u.scope === activeDistrict;
+        if (!hot && updateFrame % inactiveStride !== 0) continue;
+        u.fn(hot ? dt : dt * inactiveStride, t, hot ? anim : anim * 0.45, q);
+        updatersRun++;
+      }
+      let routeNodesUpdated = 0;
+      for (const r of Object.values(routes)) {
+        if (r.district !== activeDistrict && updateFrame % inactiveStride !== 0) continue;
+        const routeAnim = r.district === activeDistrict ? anim : anim * 0.35;
+        for (const n of r.nodes) {
+          n.node.update(dt, t, routeAnim);
+          routeNodesUpdated++;
+        }
+      }
+      lastUpdateStats = { activeDistrict, updatersRun, routeNodesUpdated, frame: updateFrame };
     }
 
     function setQuality(q) {
@@ -7018,8 +7063,9 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     return {
       THREE, root, districts, routes,
       buildRoute, districtAt, setActiveDistrict, get activeDistrict() { return activeDistrict; },
-      pulseRipple, update, setQuality, dispose,
+      pulseRipple, pulseFocus, update, setQuality, dispose,
       get updaters() { return updaters.length; },
+      get updateStats() { return { ...lastUpdateStats }; },
       ROUTES,
     };
   }
@@ -7195,10 +7241,12 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
 
     let cameraRef = null;
     let nearest = null;
+    let lastUpdateStats = { total: 0, active: 0, culled: 0 };
 
     function update(dt, t, anim, q, camera) {
       cameraRef = camera || cameraRef;
       let bestId = null, bestDist = C.SPECIMEN.scanRange;
+      let active = 0, culled = 0;
 
       for (const s of specimens.values()) {
         if (!s.aspectApplied) applyAspect(s);
@@ -7206,6 +7254,16 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
         const dx = s.group.position.x - (cameraRef ? cameraRef.position.x : 0);
         const dz = s.group.position.z - (cameraRef ? cameraRef.position.z : 0);
         const dist = Math.hypot(dx, dz);
+        if (dist < bestDist) { bestDist = dist; bestId = s.id; }
+
+        const visualActive = dist < 52 || s.inspecting || s.selected;
+        s.group.visible = visualActive;
+        if (!visualActive) {
+          s.near = damp(s.near, 0, 4, dt);
+          culled++;
+          continue;
+        }
+        active++;
 
         // Constrained billboard: yaw only, so specimens never tip over.
         if (cameraRef) {
@@ -7240,10 +7298,10 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
           s.labelSprite.scale.set((s.labelSprite.material.map.userData.aspect || 4) * 1.9 * sc, 1.9 * sc, 1);
         }
 
-        if (dist < bestDist) { bestDist = dist; bestId = s.id; }
       }
 
       nearest = bestId;
+      lastUpdateStats = { total: specimens.size, active, culled };
       return nearest;
     }
 
@@ -7260,7 +7318,11 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       root.clear();
     }
 
-    return { THREE, root, add, setDiscovered, setSelected, setInspecting, update, get, all, positionOf, hitTargets, dispose, get nearestId() { return nearest; } };
+    return {
+      THREE, root, add, setDiscovered, setSelected, setInspecting, update, get, all, positionOf, hitTargets, dispose,
+      get nearestId() { return nearest; },
+      get updateStats() { return { ...lastUpdateStats }; },
+    };
   }
 
   C.createSpecimenField = createSpecimenField;
@@ -8839,6 +8901,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
         to: { x, z, yaw },
         t: 0,
         dur: opts2.dur || (reducedWanted() ? 0.01 : 1.15),
+        arc: reducedWanted() ? 0 : (opts2.arc == null ? 4 : opts2.arc),
         label: label || null,
         then: opts2.then || null,
       };
@@ -8862,6 +8925,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
           f.from.z + (f.to.z - f.from.z) * k,
           f.from.yaw + shortAngle(f.from.yaw, f.to.yaw) * k,
         );
+        runtime.camera.position.y = C.RIG.eyeHeight + Math.sin(Math.PI * k) * f.arc;
         if (f.t >= 1) {
           const then = f.then;
           director.fly = null;
@@ -9067,7 +9131,12 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       if (!d) return;
       flyTo(d.center[0], d.center[1] + (id === 'nexus' ? 24 : 20), d.name, {
         dur: reducedWanted() ? 0.01 : 1.0,
-        then: () => { adapter.prefs.lastDistrict = id; world.pulseRipple(d.center[0], d.center[1]); },
+        arc: id === 'nexus' ? 2.5 : 5.5,
+        then: () => {
+          adapter.prefs.lastDistrict = id;
+          world.pulseRipple(d.center[0], d.center[1]);
+          world.pulseFocus(1);
+        },
       });
       setDistrictCard(id);
     }
@@ -9103,6 +9172,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       closeInspector();
       flyTo(d.center[0], d.center[1] + 17.5, 'arena', {
         dur: reducedWanted() ? 0.01 : 1.3,
+        arc: 4.2,
         then: () => {
           adapter.setFighters(me.id, rival.id);
           battle.enter({ entryA: me, entryB: rival });
@@ -9123,7 +9193,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       if (hud) hud.hidden = true;
       const s = director.saved;
       if (s) {
-        flyTo(s.x, s.z, 'return', { yaw: s.yaw, dur: reducedWanted() ? 0.01 : 0.9, then: () => { setDistrictCard(s.district); } });
+        flyTo(s.x, s.z, 'return', { yaw: s.yaw, dur: reducedWanted() ? 0.01 : 0.9, arc: 3, then: () => { setDistrictCard(s.district); world.pulseFocus(0.7); } });
       } else {
         input.setEnabled(true);
       }
@@ -9333,7 +9403,13 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     }
 
     /* ---- engine events -> 3D -------------------------------------------- */
-    adapter.on('battle', (ev) => { battle.onEvent(ev); if (ev && ev.kind === 'damage') director.shake = Math.min(1, director.shake + (ev.move === 'signature' ? 0.9 : 0.4)); });
+    adapter.on('battle', (ev) => {
+      battle.onEvent(ev);
+      if (ev && ev.kind === 'damage') {
+        director.shake = Math.min(1, director.shake + (ev.move === 'signature' ? 0.9 : 0.4));
+        if (ev.move === 'signature' || ev.flowBurst) world.pulseFocus(ev.move === 'signature' ? 1.25 : 0.7);
+      }
+    });
     adapter.on('discovery', () => refreshNavigator());
     adapter.on('battleLifecycle', (phase) => { if (phase === 'exit') renderBattleHud(); });
 

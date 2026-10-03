@@ -338,6 +338,8 @@ test('proximity: update() reports the specimen the camera stands next to', () =>
   // `near` and the billboard yaw are damped, so let them converge.
   for (let f = 0; f < 90; f++) specimens.update(0.016, 0.1 + f * 0.016, 1, {}, cam);
   assert.ok(otter.near > 0.8, `nearby specimen should register proximity, got ${otter.near.toFixed(3)}`);
+  assert.ok(specimens.updateStats.culled >= 10, `expected distant specimen culling, got ${specimens.updateStats.culled}`);
+  assert.ok(specimens.updateStats.active < specimens.updateStats.total, 'not every specimen should animate at once');
   // Yaw-only billboard: specimens never tip over.
   assert.ok(Math.abs(otter.group.rotation.x) < 1e-9, 'specimen must not pitch');
   assert.ok(Math.abs(otter.group.rotation.z) < 1e-9, 'specimen must not roll');
@@ -395,10 +397,45 @@ test('district ambience: each district owns its own reactive state', () => {
 
   world.setActiveDistrict('pride');
   assert.equal(world.activeDistrict, 'pride');
+  world.update(0.016, 1.15, 1, C.QUALITY.high);
+  assert.ok(world.updateStats.updatersRun <= 2, `too many district updaters ran: ${world.updateStats.updatersRun}`);
+  assert.ok(world.updateStats.routeNodesUpdated <= 8, `too many route nodes updated: ${world.updateStats.routeNodesUpdated}`);
+  world.pulseFocus(1);
+  world.update(0.016, 1.16, 1, C.QUALITY.high);
+  assert.ok(world.updateStats.frame > 0, 'world update telemetry should advance');
   world.setActiveDistrict('nowhere');
   assert.equal(world.activeDistrict, 'nexus', 'unknown district falls back to the nexus');
   world.pulseRipple(3, 4);
   world.update(0.016, 1.2, 1, C.QUALITY.high);
+});
+
+
+test('world scheduler: active district stays hot while remote ambience is throttled, with a focus flare on arrival', () => {
+  const { world, C } = S();
+  world.setActiveDistrict('pride');
+
+  const prismBefore = world.districts.prism.dome.rotation.y;
+  const prideBefore = world.districts.pride.rings[0].mesh.rotation.z;
+  world.update(1 / 60, 2, 1, C.QUALITY.auto);
+
+  assert.equal(world.districts.prism.dome.rotation.y, prismBefore, 'inactive Prism should skip the first remote frame');
+  assert.notEqual(world.districts.pride.rings[0].mesh.rotation.z, prideBefore, 'active Pride should update every frame');
+
+  for (let i = 0; i < 7; i++) world.update(1 / 60, 2 + (i + 1) / 60, 1, C.QUALITY.auto);
+  assert.notEqual(world.districts.prism.dome.rotation.y, prismBefore, 'inactive Prism should still advance on the reduced cadence');
+
+  const gates = [];
+  world.root.traverse((o) => {
+    if (o.userData?.kind === 'gateway' && !o.userData.label) gates.push(o);
+  });
+  const prideGate = gates.find((g) => g.userData.district === 'pride');
+  assert.ok(prideGate, 'Pride gateway arch missing');
+
+  world.setActiveDistrict('nexus');
+  for (let i = 0; i < 90; i++) world.update(1 / 60, 3 + i / 60, 1, C.QUALITY.auto);
+  world.setActiveDistrict('pride');
+  world.update(1 / 60, 5, 1, C.QUALITY.auto);
+  assert.ok(prideGate.scale.x > 1.05, 'district acquisition should flare the destination gate');
 });
 
 test('compare ring: shows up to three forms spread around a circle', () => {

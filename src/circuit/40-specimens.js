@@ -164,10 +164,12 @@
 
     let cameraRef = null;
     let nearest = null;
+    let lastUpdateStats = { total: 0, active: 0, culled: 0 };
 
     function update(dt, t, anim, q, camera) {
       cameraRef = camera || cameraRef;
       let bestId = null, bestDist = C.SPECIMEN.scanRange;
+      let active = 0, culled = 0;
 
       for (const s of specimens.values()) {
         if (!s.aspectApplied) applyAspect(s);
@@ -175,6 +177,16 @@
         const dx = s.group.position.x - (cameraRef ? cameraRef.position.x : 0);
         const dz = s.group.position.z - (cameraRef ? cameraRef.position.z : 0);
         const dist = Math.hypot(dx, dz);
+        if (dist < bestDist) { bestDist = dist; bestId = s.id; }
+
+        const visualActive = dist < 52 || s.inspecting || s.selected;
+        s.group.visible = visualActive;
+        if (!visualActive) {
+          s.near = damp(s.near, 0, 4, dt);
+          culled++;
+          continue;
+        }
+        active++;
 
         // Constrained billboard: yaw only, so specimens never tip over.
         if (cameraRef) {
@@ -209,10 +221,10 @@
           s.labelSprite.scale.set((s.labelSprite.material.map.userData.aspect || 4) * 1.9 * sc, 1.9 * sc, 1);
         }
 
-        if (dist < bestDist) { bestDist = dist; bestId = s.id; }
       }
 
       nearest = bestId;
+      lastUpdateStats = { total: specimens.size, active, culled };
       return nearest;
     }
 
@@ -229,7 +241,11 @@
       root.clear();
     }
 
-    return { THREE, root, add, setDiscovered, setSelected, setInspecting, update, get, all, positionOf, hitTargets, dispose, get nearestId() { return nearest; } };
+    return {
+      THREE, root, add, setDiscovered, setSelected, setInspecting, update, get, all, positionOf, hitTargets, dispose,
+      get nearestId() { return nearest; },
+      get updateStats() { return { ...lastUpdateStats }; },
+    };
   }
 
   C.createSpecimenField = createSpecimenField;
