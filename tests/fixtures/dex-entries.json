@@ -1,0 +1,622 @@
+[
+ {
+  "id": "twink",
+  "num": 1,
+  "name": "Twink",
+  "line": "Twink",
+  "stage": "Starter",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Lean, smooth, youthful-coded. A classic starting point in the GayDex, not an age tribunal.",
+  "build": "Slim",
+  "hair": "Little / none",
+  "age": "Younger-coded",
+  "vibe": "Boyish / pretty",
+  "stats": [
+   94,
+   28,
+   8,
+   82,
+   91
+  ],
+  "traits": [
+   "slim",
+   "smooth",
+   "young",
+   "boyish"
+  ],
+  "evo": [
+   "twink",
+   "twank",
+   "twunk",
+   "mega-twunk"
+  ],
+  "mega": "mega-twunk",
+  "imgBytes": 13511
+ },
+ {
+  "id": "twank",
+  "num": 2,
+  "name": "Twank",
+  "line": "Twink",
+  "stage": "Stage II",
+  "designation": "House coinage",
+  "rarity": "Rare-ish",
+  "desc": "Past-tense twink: visibly older, still slim and smooth, with enough twink phenotype left to make the grammar annoyingly functional.",
+  "build": "Slim",
+  "hair": "Little / none",
+  "age": "Adult",
+  "vibe": "Mature twink",
+  "stats": [
+   74,
+   34,
+   10,
+   86,
+   88
+  ],
+  "traits": [
+   "slim",
+   "smooth",
+   "adult",
+   "boyish"
+  ],
+  "evo": [
+   "twink",
+   "twank",
+   "twunk",
+   "mega-twunk"
+  ],
+  "mega": "mega-twunk",
+  "imgBytes": 13887
+ },
+ {
+  "id": "twunk",
+  "num": 3,
+  "name": "Twunk",
+  "line": "Twink",
+  "stage": "Stage III",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Twink-adjacent presentation with appreciably more muscle. The gym happened. The taxonomy adjusted.",
+  "build": "Athletic",
+  "hair": "Low / variable",
+  "age": "Any adult",
+  "vibe": "Polished / athletic",
+  "stats": [
+   67,
+   84,
+   24,
+   78,
+   90
+  ],
+  "traits": [
+   "athletic",
+   "smooth",
+   "adult"
+  ],
+  "evo": [
+   "twink",
+   "twank",
+   "twunk",
+   "mega-twunk"
+  ],
+  "mega": "mega-twunk",
+  "imgBytes": 13475
+ },
+ {
+  "id": "mega-twunk",
+  "num": 4,
+  "name": "Mega Twunk",
+  "line": "Twink",
+  "stage": "Mega",
+  "designation": "Playful mega form",
+  "rarity": "Mega",
+  "desc": "The intentionally fictional apex of the twunk branch: absurdly refined, gym-lit, and radiating enough confidence to alter nearby weather.",
+  "build": "Athletic+",
+  "hair": "Low / variable",
+  "age": "Any adult",
+  "vibe": "Maximum sparkle",
+  "stats": [
+   72,
+   100,
+   30,
+   91,
+   100
+  ],
+  "traits": [
+   "athletic",
+   "smooth",
+   "mega"
+  ],
+  "evo": [
+   "twink",
+   "twank",
+   "twunk",
+   "mega-twunk"
+  ],
+  "imgBytes": 15639
+ },
+ {
+  "id": "elder-twink",
+  "num": 5,
+  "name": "Elder Twink",
+  "line": "Twink",
+  "stage": "Variant",
+  "designation": "Community slang",
+  "rarity": "Rare",
+  "desc": "Older while retaining a recognizably slim, smooth and youthful-coded presentation. Age changed; the silhouette largely did not.",
+  "build": "Slim",
+  "hair": "Little / none",
+  "age": "Mature",
+  "vibe": "Youthful, visibly older",
+  "stats": [
+   62,
+   31,
+   12,
+   94,
+   86
+  ],
+  "traits": [
+   "slim",
+   "smooth",
+   "mature",
+   "boyish"
+  ],
+  "evo": [
+   "twink",
+   "elder-twink"
+  ],
+  "imgBytes": 12135
+ },
+ {
+  "id": "cub",
+  "num": 6,
+  "name": "Cub",
+  "line": "Cub",
+  "stage": "Starter",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Youthful bear-adjacent type, commonly softer or stockier. Hair varies more than gay taxonomy would like to admit.",
+  "build": "Soft / stocky",
+  "hair": "Variable",
+  "age": "Younger-coded",
+  "vibe": "Warm / youthful",
+  "stats": [
+   88,
+   63,
+   38,
+   58,
+   85
+  ],
+  "traits": [
+   "soft",
+   "young"
+  ],
+  "evo": [
+   "cub",
+   "cob",
+   "bear",
+   "mega-bear"
+  ],
+  "mega": "mega-bear",
+  "imgBytes": 12379
+ },
+ {
+  "id": "cob",
+  "num": 7,
+  "name": "Cob",
+  "line": "Cub",
+  "stage": "Stage II",
+  "designation": "House coinage",
+  "rarity": "Uncommon",
+  "desc": "Our older-cub bridge form: stocky or soft, comparatively smooth, and still carrying youthful facial energy without pretending time stopped.",
+  "build": "Soft / stocky",
+  "hair": "Little / light",
+  "age": "Adult",
+  "vibe": "Mature cub",
+  "stats": [
+   70,
+   68,
+   22,
+   79,
+   88
+  ],
+  "traits": [
+   "soft",
+   "smooth",
+   "adult"
+  ],
+  "evo": [
+   "cub",
+   "cob",
+   "bear",
+   "mega-bear"
+  ],
+  "mega": "mega-bear",
+  "imgBytes": 13407
+ },
+ {
+  "id": "bear",
+  "num": 8,
+  "name": "Bear",
+  "line": "Cub",
+  "stage": "Stage III",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Broad bear-family label often associated with bigger builds, facial or body hair, and an intentionally rugged presentation.",
+  "build": "Broad / stocky",
+  "hair": "Hairy",
+  "age": "Adult+",
+  "vibe": "Rugged / warm",
+  "stats": [
+   45,
+   88,
+   91,
+   84,
+   89
+  ],
+  "traits": [
+   "large",
+   "hairy",
+   "adult",
+   "rugged"
+  ],
+  "evo": [
+   "cub",
+   "cob",
+   "bear",
+   "mega-bear"
+  ],
+  "mega": "mega-bear",
+  "imgBytes": 16487
+ },
+ {
+  "id": "mega-bear",
+  "num": 9,
+  "name": "Mega Bear",
+  "line": "Cub",
+  "stage": "Mega",
+  "designation": "Playful mega form",
+  "rarity": "Mega",
+  "desc": "Maximum bear energy. Not scientifically recognized by anyone with a grant, which is frankly their loss.",
+  "build": "Massive",
+  "hair": "Very hairy",
+  "age": "Adult+",
+  "vibe": "Mythic bear",
+  "stats": [
+   38,
+   100,
+   100,
+   96,
+   97
+  ],
+  "traits": [
+   "large",
+   "hairy",
+   "mega",
+   "rugged"
+  ],
+  "evo": [
+   "cub",
+   "cob",
+   "bear",
+   "mega-bear"
+  ],
+  "imgBytes": 19215
+ },
+ {
+  "id": "polar-bear",
+  "num": 10,
+  "name": "Polar Bear",
+  "line": "Cub",
+  "stage": "Silver Variant",
+  "designation": "Community slang",
+  "rarity": "Special",
+  "desc": "An older bear with gray or white hair. Same family, winter palette.",
+  "build": "Broad / stocky",
+  "hair": "Gray / white",
+  "age": "Silver",
+  "vibe": "Seasoned bear",
+  "stats": [
+   24,
+   90,
+   98,
+   100,
+   91
+  ],
+  "traits": [
+   "large",
+   "hairy",
+   "silver",
+   "rugged"
+  ],
+  "evo": [
+   "bear",
+   "polar-bear"
+  ],
+  "imgBytes": 13043
+ },
+ {
+  "id": "twink-otter",
+  "num": 11,
+  "name": "Twink-Otter",
+  "line": "Otter",
+  "stage": "Starter Variant",
+  "designation": "Descriptive hybrid",
+  "rarity": "Uncommon",
+  "desc": "A lean youthful bridge toward otter territory: the silhouette says twink, the body hair has submitted a dissenting report.",
+  "build": "Slim",
+  "hair": "Light",
+  "age": "Younger-coded",
+  "vibe": "Natural / youthful",
+  "stats": [
+   88,
+   38,
+   47,
+   68,
+   86
+  ],
+  "traits": [
+   "slim",
+   "light",
+   "young"
+  ],
+  "evo": [
+   "twink-otter",
+   "otter",
+   "mature-otter",
+   "mega-otter"
+  ],
+  "mega": "mega-otter",
+  "imgBytes": 13415
+ },
+ {
+  "id": "otter",
+  "num": 12,
+  "name": "Otter",
+  "line": "Otter",
+  "stage": "Stage II",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Typically lean or athletic and notably hairy: the streamlined branch of the woodland bureaucracy.",
+  "build": "Lean / athletic",
+  "hair": "Hairy",
+  "age": "Adult",
+  "vibe": "Natural / active",
+  "stats": [
+   64,
+   62,
+   78,
+   72,
+   88
+  ],
+  "traits": [
+   "slim",
+   "hairy",
+   "adult"
+  ],
+  "evo": [
+   "twink-otter",
+   "otter",
+   "mature-otter",
+   "mega-otter"
+  ],
+  "mega": "mega-otter",
+  "imgBytes": 13159
+ },
+ {
+  "id": "mature-otter",
+  "num": 13,
+  "name": "Mature Otter",
+  "line": "Otter",
+  "stage": "Stage III",
+  "designation": "Descriptive extension",
+  "rarity": "Uncommon",
+  "desc": "The otter phenotype after some mileage: still lean, still hairy, now with visibly mature features.",
+  "build": "Lean / athletic",
+  "hair": "Hairy",
+  "age": "Mature",
+  "vibe": "Seasoned / natural",
+  "stats": [
+   42,
+   70,
+   86,
+   90,
+   86
+  ],
+  "traits": [
+   "slim",
+   "hairy",
+   "mature"
+  ],
+  "evo": [
+   "twink-otter",
+   "otter",
+   "mature-otter",
+   "mega-otter"
+  ],
+  "mega": "mega-otter",
+  "imgBytes": 14503
+ },
+ {
+  "id": "mega-otter",
+  "num": 14,
+  "name": "Mega Otter",
+  "line": "Otter",
+  "stage": "Mega",
+  "designation": "Playful mega form",
+  "rarity": "Mega",
+  "desc": "A fictional peak-form otter: sleek, rugged, silver-flecked, and apparently generated by a hiking app with excellent taste.",
+  "build": "Athletic",
+  "hair": "Hairy",
+  "age": "Adult+",
+  "vibe": "Peak outdoorsy",
+  "stats": [
+   48,
+   91,
+   90,
+   90,
+   99
+  ],
+  "traits": [
+   "athletic",
+   "hairy",
+   "mega"
+  ],
+  "evo": [
+   "twink-otter",
+   "otter",
+   "mature-otter",
+   "mega-otter"
+  ],
+  "imgBytes": 17955
+ },
+ {
+  "id": "silver-otter",
+  "num": 15,
+  "name": "Silver Otter",
+  "line": "Otter",
+  "stage": "Silver Variant",
+  "designation": "Descriptive extension",
+  "rarity": "Special",
+  "desc": "Older otter presentation with gray or white hair. Lean, hairy, and absolutely not required to start discussing lawn equipment.",
+  "build": "Lean / athletic",
+  "hair": "Gray / white",
+  "age": "Silver",
+  "vibe": "Experienced / sleek",
+  "stats": [
+   23,
+   68,
+   90,
+   100,
+   87
+  ],
+  "traits": [
+   "slim",
+   "hairy",
+   "silver"
+  ],
+  "evo": [
+   "otter",
+   "silver-otter"
+  ],
+  "imgBytes": 12495
+ },
+ {
+  "id": "jock",
+  "num": 16,
+  "name": "Jock",
+  "line": "Independent",
+  "stage": "Side Species",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "Athletic or sports-coded presentation. Can overlap twunk, hunk, otter, daddy and several other categories because taxonomy has failed again.",
+  "build": "Athletic",
+  "hair": "Variable",
+  "age": "Any adult",
+  "vibe": "Sporty",
+  "stats": [
+   58,
+   92,
+   48,
+   70,
+   82
+  ],
+  "traits": [
+   "athletic",
+   "sporty"
+  ],
+  "evo": [
+   "jock"
+  ],
+  "imgBytes": 10151
+ },
+ {
+  "id": "daddy",
+  "num": 17,
+  "name": "Daddy",
+  "line": "Independent",
+  "stage": "Side Species",
+  "designation": "Community slang",
+  "rarity": "Common",
+  "desc": "A mature-coded identity or vibe, not one fixed body type. Age, presentation, confidence and relational energy all matter more than a single measurement.",
+  "build": "Variable",
+  "hair": "Variable",
+  "age": "Mature-coded",
+  "vibe": "Daddy",
+  "stats": [
+   28,
+   78,
+   84,
+   100,
+   93
+  ],
+  "traits": [
+   "mature",
+   "daddy"
+  ],
+  "evo": [
+   "daddy",
+   "silver-daddy"
+  ],
+  "imgBytes": 12331
+ },
+ {
+  "id": "silver-daddy",
+  "num": 18,
+  "name": "Silver Daddy",
+  "line": "Independent",
+  "stage": "Silver Variant",
+  "designation": "Descriptive extension",
+  "rarity": "Special",
+  "desc": "Daddy energy with gray or white hair and an additional allocation of experience points.",
+  "build": "Variable",
+  "hair": "Gray / white",
+  "age": "Silver",
+  "vibe": "Maximum daddy",
+  "stats": [
+   14,
+   82,
+   93,
+   100,
+   94
+  ],
+  "traits": [
+   "silver",
+   "daddy"
+  ],
+  "evo": [
+   "daddy",
+   "silver-daddy"
+  ],
+  "imgBytes": 12927
+ },
+ {
+  "id": "average-guy",
+  "num": 19,
+  "name": "Average Guy",
+  "line": "Independent",
+  "stage": "Unclassified",
+  "designation": "Anti-taxonomy refuge",
+  "rarity": "Extremely common",
+  "desc": "Does not neatly fit a named tribe, which remains legal. Sometimes a man is simply standing there.",
+  "build": "Variable",
+  "hair": "Variable",
+  "age": "Any adult",
+  "vibe": "A guy",
+  "stats": [
+   50,
+   50,
+   50,
+   50,
+   50
+  ],
+  "traits": [
+   "variable"
+  ],
+  "evo": [
+   "average-guy"
+  ],
+  "imgBytes": 10831
+ }
+]
