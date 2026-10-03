@@ -79,7 +79,7 @@ export function encodePng(width, height, rgba) {
 /* --------------------------------------------------------------- canvas --- */
 
 /** Tiny software rasteriser: supersampled shapes into an RGBA buffer. */
-function canvas(width, height, opts = {}) {
+export function canvas(width, height, opts = {}) {
   const ss = opts.supersample || 2;           // draw big, then box-filter down
   const w = width * ss, h = height * ss;
   const px = new Float32Array(w * h * 4);
@@ -209,7 +209,7 @@ function canvas(width, height, opts = {}) {
 }
 
 /* 5x7 bitmap letterforms. Enough of the alphabet for the marks we draw. */
-const FONT = {
+export const FONT = {
   B: ['11110', '10001', '10001', '11110', '10001', '10001', '11110'],
   F: ['11111', '10000', '10000', '11110', '10000', '10000', '10000'],
   H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],

@@ -313,3 +313,11 @@ body.circuit-reduced .circuit-toast{transition:none}
 .duel-stats dd.up{color:var(--green)}
 .duel-stats dd.down{color:var(--danger)}
 @media(prefers-reduced-motion:reduce){.duel-card canvas{transition:none}}
+/* ===== Loop 5: skip link and the no-JS fallback ===== */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:1000;background:var(--cyan);color:#05060f;font-weight:900;padding:10px 14px;border-radius:0 0 12px 0;text-decoration:none}
+.skip-link:focus{left:0}
+.noscript-note{margin:14px 0;padding:16px 18px;border:1px solid var(--gold);border-radius:16px;background:rgba(255,193,74,.06)}
+.noscript-note strong{color:var(--gold)}
+.noscript-note p{color:#ded9ea;margin:8px 0;max-width:78ch}
+.noscript-note ul{margin:10px 0;padding-left:18px;display:grid;gap:6px;color:#cfc9e4;font-size:13.5px}
+.noscript-note em{color:var(--muted);font-style:normal}

@@ -52,8 +52,9 @@ jobs:
 
       - name: Prepare static site
         run: |
-          mkdir -p _site
+          mkdir -p _site/assets
           cp GayDex_Battle_Simulator_SINGLE_FILE.html _site/index.html
+          cp assets/og-card.png assets/icon-512.png _site/assets/
           touch _site/.nojekyll
 
       - name: Configure GitHub Pages

@@ -53,7 +53,36 @@ const SCRIPTS = [
  * procedural marks can never drift away from the artifact. */
 const PARTIALS = {
   '<!--#circuit-root-->': 'src/shell/partials/circuit-root.html',
+  '<!--#noscript-->': 'src/shell/partials/noscript.html',
 };
+
+/**
+ * The canonical taxonomy is written as a JSON literal inside `src/app.js`.
+ * Read it back out so the no-JS fallback lists the real nineteen forms rather
+ * than a hand-kept copy that would drift. Failing loudly here is correct: if
+ * that literal cannot be parsed, the artifact is being assembled from something
+ * that is not the GayDex.
+ */
+function readDex() {
+  const src = readRoot('src/app.js');
+  const start = src.indexOf('const GAYDEX=[');
+  if (start < 0) throw new Error('could not find the GAYDEX literal in src/app.js');
+  const end = src.indexOf('];', start);
+  if (end < 0) throw new Error('could not find the end of the GAYDEX literal in src/app.js');
+  return JSON.parse(src.slice(start + 'const GAYDEX='.length, end + 1));
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** Render the static, script-free view of the taxonomy. */
+function noscriptList() {
+  const dex = readDex();
+  const lines = ['Twink', 'Cub', 'Otter', 'Independent'];
+  return lines.map((line) => {
+    const forms = dex.filter((e) => e.line === line).sort((a, b) => a.num - b.num);
+    return `<li><strong>${escapeHtml(line)}</strong>: ${forms.map((e) => `${escapeHtml(e.name)} <em>(${escapeHtml(e.stage)})</em>`).join(' \u00b7 ')}</li>`;
+  }).join('\n          ');
+}
 /** Head partials referenced through the head fragment rather than the body. */
 const HEAD_PARTIAL = {
   '<!--#head-icons-->': 'src/shell/partials/head-icons.html',
@@ -88,7 +117,10 @@ export function assemble({ scripts = SCRIPTS, parts = PARTS, banner = true, part
       if (read !== readRoot) continue; // pristine snapshot predates partials
       throw new Error(`missing partial marker ${marker} in ${parts.body}`);
     }
-    body = body.replace(marker, read(file).replace(/\n$/, ''));
+    let partial = read(file).replace(/\n$/, '');
+    // The no-JS fallback lists the real taxonomy, generated at build time.
+    if (partial.includes('<!--#dex-list-->')) partial = partial.replace('<!--#dex-list-->', noscriptList());
+    body = body.replace(marker, partial);
   }
   chunks.push(body);
   chunks.push('<script>');

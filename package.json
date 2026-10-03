@@ -14,7 +14,8 @@
     "test:engine": "node --test tests/battle-equivalence.test.mjs",
     "test:world": "node --test tests/circuit-world.test.mjs",
     "test:boot": "node --test tests/jsdom-boot.test.mjs",
-    "verify": "node tools/build.mjs --roundtrip && node --test \"tests/*.test.mjs\" && node tools/build.mjs --check"
+    "verify": "node tools/build.mjs --roundtrip && node --test \"tests/*.test.mjs\" && node tools/build.mjs --check",
+    "preview:duel": "node tools/preview-duel.mjs"
   },
   "devDependencies": {
     "jsdom": "25.0.1"
