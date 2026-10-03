@@ -102,8 +102,141 @@ document.querySelectorAll('[data-quick]').forEach(b=>b.addEventListener('click',
  * be. State comes from canonical discovery; nothing here is decorative. */
 function renderLattice(){const wrap=$('#dexLattice');if(!wrap)return;const dots=$('#latticeDots'),prog=$('#latticeProgress'),note=$('#latticeNote');const seen=state.seen.size,total=GAYDEX.length;if(dots){dots.innerHTML=GAYDEX.map(e=>{const on=state.seen.has(e.id);return `<button type="button" class="lattice-dot${on?' seen':''}${e.id===state.selected?' selected':''}" data-lattice="${e.id}" style="--dotColor:${lineColor(e)}" aria-pressed="${on}" aria-label="#${String(e.num).padStart(3,'0')} ${esc(e.name)} — ${esc(e.line)} line, ${on?'observed':'not yet observed'}" title="#${String(e.num).padStart(3,'0')} ${e.name} · ${e.line} · ${on?'observed':'not yet observed'}"><i></i><span>${e.num}</span></button>`}).join('');dots.querySelectorAll('[data-lattice]').forEach(b=>b.addEventListener('click',()=>{selectEntry(b.dataset.lattice,true);renderLattice()}))}if(prog)prog.textContent=`${seen} / ${total} observed`;const done=seen>=total;wrap.classList.toggle('complete',done);if(note)note.textContent=done?'Every form on record has been seen. The taxonomy has nowhere left to hide.':'Scanning is what turns a hologram into a portrait.';const next=$('#nextUnseenBtn');if(next){const rest=GAYDEX.filter(e=>!state.seen.has(e.id));next.disabled=!rest.length;next.textContent=rest.length?`⌖ Next unobserved (${rest.length} left)`:'✓ All 19 observed';next.dataset.next=rest.length?rest[0].id:''}}
 const nextUnseenBtn=$('#nextUnseenBtn');if(nextUnseenBtn)nextUnseenBtn.addEventListener('click',()=>{const id=nextUnseenBtn.dataset.next;if(id)selectEntry(id,true)});
+/* ---------------------------------------------------------------------------
+ * FIGHT-VECTOR PROFILE ("duel card")
+ *
+ * Every number drawn here comes from the canonical engine: the three attack
+ * vectors (Force / Style / Insight) plus the derived HP, Armor, Speed and Crit
+ * are read straight off BattleCore.battleStats for the selected form and one
+ * real rival from the dex. Nothing is invented and no outcome is predicted -
+ * the card shows the shape of the two fighters the engine will actually
+ * simulate, which is precisely the part a stat table hides.
+ *
+ * It is also live: while a duel is being resolved the rings switch to the
+ * engine's own HP, shield and Hype for that fighter, so the card doubles as a
+ * cockpit for the match running underneath it.
+ * ------------------------------------------------------------------------- */
+const DUEL_VECTORS=['force','style','insight'];
+const duelState={rival:null,raf:0,model:null,shown:null};
+function duelRivalFor(e){const pool=GAYDEX.filter(x=>x.id!==e.id&&x.stage!=='Mega');return pool.length?pool[(e.num*7+3)%pool.length]:null}
+function duelEnvelope(v){const mx=Math.max(v.force,v.style,v.insight)||1;return (v.force*v.style*v.insight)/(mx*mx*mx)}
+function duelModel(e,rival){
+  const mine=BattleCore.battleStats(e,true),theirs=rival?BattleCore.battleStats(rival,true):null;
+  const live=(battleState.match&&!battleState.match.ended)?[battleState.match.a,battleState.match.b].find(f=>f.entry.id===e.id):null;
+  const a=duelEnvelope(mine),b=theirs?duelEnvelope(theirs):0;
+  return {
+    id:e.id,name:e.name,line:e.line,color:lineColor(e),
+    self:{force:mine.force,style:mine.style,insight:mine.insight,maxHp:mine.maxHp,armor:mine.armor,speed:mine.speed,crit:mine.crit,envelope:a},
+    rival:rival?{id:rival.id,name:rival.name,line:rival.line,color:lineColor(rival),force:theirs.force,style:theirs.style,insight:theirs.insight,maxHp:theirs.maxHp,armor:theirs.armor,speed:theirs.speed,crit:theirs.crit,envelope:duelEnvelope(theirs)}:null,
+    dominance:b?a/(a+b):1,
+    live:live?{hpRatio:Math.max(0,live.hp/live.maxHp),hp:live.hp,maxHp:live.maxHp,shield:live.shield,hype:live.hype,combo:live.combo,signatureReady:live.sigCd===0&&live.hype>=100}:null,
+  };
+}
+function duelPolygon(v,cx,cy,r){const mx=Math.max(v.force,v.style,v.insight,1);return DUEL_VECTORS.map((k,i)=>{const a=-Math.PI/2+i*(Math.PI*2/3);const len=r*(0.28+0.72*(v[k]/mx));return [cx+Math.cos(a)*len,cy+Math.sin(a)*len]})}
+function duelAria(m){const s=m.self;const base=`${m.name}: Force ${Math.round(s.force)}, Style ${Math.round(s.style)}, Insight ${Math.round(s.insight)}, ${Math.round(s.maxHp)} HP, armor ${Math.round(s.armor)}, speed ${Math.round(s.speed)}, crit ${Math.round(s.crit*100)} percent.`;if(!m.rival)return base;const r=m.rival;const ahead=DUEL_VECTORS.filter(k=>s[k]>r[k]).map(k=>k);return `${base} Compared with ${r.name} (Force ${Math.round(r.force)}, Style ${Math.round(r.style)}, Insight ${Math.round(r.insight)}, ${Math.round(r.maxHp)} HP): ${ahead.length?`ahead on ${ahead.join(', ')}`:'ahead on no vector'}; vector-envelope share ${Math.round(m.dominance*100)} percent.`}
+function duelDraw(model){
+  const canvas=$('#duelCanvas');if(!canvas||!canvas.getContext)return null;
+  const ctx=canvas.getContext('2d');if(!ctx)return null;
+  const W=canvas.width,H=canvas.height,cx=W*0.36,cy=H*0.5,R=Math.min(H*0.40,W*0.24);
+  const p=(v)=>duelPolygon(v,cx,cy,R);
+  const trace=(pts,close)=>{ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);if(close)ctx.closePath()};
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='rgba(66,231,255,.10)';ctx.lineWidth=1;
+  for(let x=0;x<W;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  ctx.strokeStyle='rgba(160,170,210,.26)';
+  for(let i=0;i<3;i++){const a=-Math.PI/2+i*(Math.PI*2/3);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*R*1.06,cy+Math.sin(a)*R*1.06);ctx.stroke()}
+  if(model.rival){const rp=p(model.rival);ctx.fillStyle='rgba(255,255,255,.06)';trace(rp,true);ctx.fill();ctx.strokeStyle=model.rival.color;ctx.lineWidth=2;ctx.setLineDash([6,5]);trace(rp,true);ctx.stroke();ctx.setLineDash([])}
+  const mp=p(model.self);ctx.fillStyle=model.color+'44';ctx.strokeStyle=model.color;ctx.lineWidth=2.5;trace(mp,true);ctx.fill();ctx.stroke();
+  for(const [x,y] of mp){ctx.fillStyle=model.color;ctx.beginPath();ctx.arc(x,y,3.4,0,Math.PI*2);ctx.fill()}
+  ctx.font='700 13px ui-monospace,SFMono-Regular,Menlo,monospace';
+  DUEL_VECTORS.forEach((k,i)=>{const [x,y]=mp[i];const a=-Math.PI/2+i*(Math.PI*2/3);ctx.fillStyle=model.color;ctx.fillText(k.toUpperCase()+' '+Math.round(model.self[k]),Math.min(W-104,Math.max(6,x+Math.cos(a)*18-26)),Math.min(H-8,Math.max(16,y+Math.sin(a)*18+5)))});
+  const rx=W*0.78,ry=H*0.5,r=R*0.92;
+  const ring=(rad,frac,color,width)=>{ctx.beginPath();ctx.arc(rx,ry,rad,-Math.PI/2,-Math.PI/2+Math.PI*2*Math.max(0,Math.min(1,frac)));ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.stroke()};
+  ctx.strokeStyle='rgba(120,130,180,.22)';ctx.lineWidth=7;ctx.beginPath();ctx.arc(rx,ry,r,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+  ring(r,model.live?model.live.hpRatio:1,model.color,7);
+  ctx.strokeStyle='rgba(120,130,180,.22)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(rx,ry,r-14,-Math.PI/2,Math.PI*1.5);ctx.stroke();
+  ring(r-14,(model.live?model.live.hype:0)/100,'#ffc14a',5);
+  ctx.textAlign='center';
+  ctx.fillStyle='#fff';ctx.font='800 20px ui-monospace,SFMono-Regular,Menlo,monospace';
+  ctx.fillText(model.live?Math.ceil(model.live.hp)+' HP':Math.round(model.self.maxHp)+' HP',rx,ry+2);
+  ctx.fillStyle='#9aa3c7';ctx.font='700 11px ui-monospace,SFMono-Regular,Menlo,monospace';
+  ctx.fillText(model.live?'HYPE '+Math.round(model.live.hype)+'%':'MAX HP',rx,ry+20);
+  ctx.fillText('ARMOR '+Math.round(model.self.armor),rx,ry+38);
+  ctx.fillText('SPEED '+Math.round(model.self.speed),rx,ry+54);
+  ctx.fillText('CRIT '+Math.round(model.self.crit*100)+'%',rx,ry+70);
+  ctx.textAlign='left';
+  return model;
+}
+/* Announced state is always the TARGET model, never a morphing frame: the
+ * canvas may animate, but the numbers a screen reader or a test reads must be
+ * the real ones for the real form. */
+function duelAnnotations(model){
+  const canvas=$('#duelCanvas');
+  if(!canvas)return;
+  canvas.setAttribute('aria-label',duelAria(model));
+  canvas.dataset.model=JSON.stringify({self:model.self,rival:model.rival?{id:model.rival.id,force:model.rival.force,style:model.rival.style,insight:model.rival.insight}:null,dominance:model.dominance});
+}
+function paintDuelCard(model,geometryOnly){
+  const card=$('#duelCard');if(!card)return;
+  card.classList.toggle('live',!!model.live);
+  duelDraw(model);
+  if(geometryOnly)return;
+  duelAnnotations(model);
+  const cap=$('#duelCaption'),r=model.rival;
+  if(cap){
+    if(model.live)cap.innerHTML=`<b>LIVE</b> \u2014 ${esc(model.name)} at ${Math.ceil(model.live.hp)} HP${model.live.shield?` +${Math.round(model.live.shield)} shield`:''} \u00b7 Hype ${Math.round(model.live.hype)}%${model.live.combo>=3?` \u00b7 FLOW x${model.live.combo}`:''}${model.live.signatureReady?' \u00b7 <b>SIGNATURE READY</b>':''}. The rings track the engine's own match state.`;
+    else if(r){const ahead=DUEL_VECTORS.filter(k=>model.self[k]>r[k]).length,behind=DUEL_VECTORS.filter(k=>model.self[k]<r[k]).length;cap.innerHTML=`Against <b>${esc(r.name)}</b>: ahead on ${ahead} of 3 attack vectors, behind on ${behind}. Vector-envelope share <b>${Math.round(model.dominance*100)}%</b>. Derived by the battle engine from the five axes above \u2014 no outcome is predicted here.`}
+    else cap.textContent='Fight vectors derived by the battle engine from the five axes above.';
+  }
+  const list=$('#duelStats');
+  if(list){
+    const rows=[['Force',model.self.force,r&&r.force,0],['Style',model.self.style,r&&r.style,0],['Insight',model.self.insight,r&&r.insight,0],['Max HP',model.self.maxHp,r&&r.maxHp,0],['Armor',model.self.armor,r&&r.armor,0],['Speed',model.self.speed,r&&r.speed,0],['Crit',model.self.crit*100,r&&r.crit*100,1]];
+    list.innerHTML=rows.map(([k,mine,theirs,dec])=>{const d=theirs==null?null:mine-theirs;const cls=d==null?'':d>0.05?'up':d<-0.05?'down':'';const delta=d==null?'':` (${d>0?'+':''}${d.toFixed(dec)})`;return `<div><dt>${k}</dt><dd class="${cls}">${mine.toFixed(dec)}${esc(delta)}</dd></div>`}).join('');
+  }
+}
+function renderDuelCard(e,opts={}){
+  const card=$('#duelCard');if(!card||!e)return null;
+  // `rival` pins an exact opponent (used by tests and by the cycle control);
+  // otherwise the rival is chosen deterministically from the dex.
+  const pinned=opts.rival==null?null:(typeof opts.rival==='string'?entry(opts.rival):opts.rival);
+  const rival=pinned||((opts.keepRival&&duelState.rival)?duelState.rival:duelRivalFor(e));
+  duelState.rival=rival;
+  const model=duelModel(e,rival);
+  const previous=duelState.model&&duelState.model.id!==model.id?duelState.model:null;
+  if(duelState.raf){cancelAnimationFrame(duelState.raf);duelState.raf=0}
+  duelState.model=model;
+  const reduce=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!previous||reduce){paintDuelCard(model);return model}
+  duelAnnotations(model);
+  // Morph between the previous form's shape and this one: state-driven motion
+  // that shows the change in the engine's numbers instead of decorating it.
+  const t0=performance.now(),dur=420;
+  const step=(now)=>{const k=Math.min(1,(now-t0)/dur),ease=1-Math.pow(1-k,3);
+    const mix=(a,b)=>DUEL_VECTORS.reduce((o,key)=>(o[key]=a[key]+(b[key]-a[key])*ease,o),{});
+    paintDuelCard({...model,self:{...model.self,...mix(previous.self,model.self)},rival:model.rival&&previous.rival?{...model.rival,...mix(previous.rival,model.rival)}:model.rival},true);
+    if(k<1)duelState.raf=requestAnimationFrame(step);else{duelState.raf=0;paintDuelCard(model)}
+  };
+  duelState.raf=requestAnimationFrame(step);
+  return model;
+}
+let duelCardTimer=0;
+/** Redraw the duel card once the selection settles; never block the click. */
+function scheduleDuelCard(e){clearTimeout(duelCardTimer);const id=e.id;duelCardTimer=setTimeout(()=>{if(state.selected!==id)return;const cur=entry(id);if(cur)renderDuelCard(cur)},60)}
+/** Keep the duel card in step with a live match - no second render loop. */
+function refreshDuelLive(){const card=$('#duelCard');if(!card)return;const e=entry(state.selected);if(!e)return;const ids=battleState.match?[battleState.match.a,battleState.match.b].map(f=>f.entry.id):[];const liveNow=ids.indexOf(e.id)>=0;if(liveNow||card.classList.contains('live'))renderDuelCard(e,{keepRival:true})}
+const duelRivalBtn=$('#duelRivalBtn');
+if(duelRivalBtn)duelRivalBtn.addEventListener('click',()=>{
+  const e=entry(state.selected);if(!e)return;
+  const pool=GAYDEX.filter(x=>x.id!==e.id&&x.stage!=='Mega');
+  if(pool.length<2)return;
+  const i=pool.indexOf(duelState.rival);
+  duelState.rival=pool[(i+1)%pool.length];
+  renderDuelCard(e,{keepRival:true});
+});
+
 function designationClass(d){return d==='House coinage'?'designation-house':d.includes('mega')||d.includes('Mega')?'designation-mega':''}function refreshGridState(){let old=$('#dexGrid .card.selected');old?.classList.remove('selected');let cur=document.querySelector(`#dexGrid .card[data-id="${CSS.escape(state.selected)}"]`);cur?.classList.add('selected','seen')}
-function renderEntry(e,trigger3d=true){if(trigger3d&&typeof battleState!=='undefined'&&battleState.mirrorHero){battleState.mirrorHero=false;let b=$('#battleMirror');if(b){b.setAttribute('aria-pressed','false');b.textContent='↥ Mirror battle'}}$('#stage')?.classList.remove('battle-active');if($('#battleStageFallback'))$('#battleStageFallback').hidden=true;state.selected=e.id;state.seen.add(e.id);save();let pct=Math.round(state.seen.size/GAYDEX.length*100);$('#seenCount').textContent=state.seen.size;$('#seenPct').textContent=`${pct}%`;$('#favCount').textContent=state.favs.size;renderLattice();$('#stageNum').textContent=`#${String(e.num).padStart(3,'0')} // ${e.stage.toUpperCase()}`;$('#stageName').textContent=e.name.toUpperCase();$('#fallbackPortrait').src=e.img;$('#fallbackPortrait').alt=`Illustrated ${e.name}`;$('#entryName').textContent=e.name;$('#entryDesc').textContent=e.desc;document.documentElement.style.setProperty('--lineColor',lineColor(e));$('#eyebrow').innerHTML=`<span class="tag">${esc(e.line)} line</span><span class="tag ${designationClass(e.designation)}">${esc(e.designation)}</span><span class="tag">${esc(e.rarity)}</span>`;$('#facts').innerHTML=[['Build',e.build],['Body hair',e.hair],['Life stage',e.age],['Vibe',e.vibe]].map(x=>`<div class="fact"><small>${x[0]}</small><strong>${esc(x[1])}</strong></div>`).join('');$('#stats').innerHTML=e.stats.map((v,i)=>`<div class="stat"><span>${statNames[i]}</span><div class="track"><div class="fill" style="width:${v}%"></div></div><strong>${v}</strong></div>`).join('');$('#evoPath').innerHTML=e.evo.map((id,i)=>{let x=entry(id);return `<button type="button" class="evo-node ${id===e.id?'active':''}" data-evo="${id}">${esc(x.name)}</button>${i<e.evo.length-1?'<span class="arrow">→</span>':''}`}).join('');document.querySelectorAll('[data-evo]').forEach(b=>b.addEventListener('click',()=>selectEntry(b.dataset.evo,true)));let mb=$('#megaBtn');mb.disabled=!e.mega&&e.stage==='Mega';mb.textContent=e.stage==='Mega'?'✦ Mega Active':e.mega?'✦ Mega Shift':'✦ No Mega Route';mb.dataset.mega=e.mega||'';let f=state.favs.has(e.id);$('#favBtn').setAttribute('aria-pressed',String(f));$('#favBtn').textContent=f?'♥ Favorited':'♡ Favorite';let cmp=state.compare.has(e.id);$('#compareBtn').setAttribute('aria-pressed',String(cmp));$('#compareBtn').textContent=cmp?'⊖ Remove compare':'⊕ Compare';scheduleLineageGhosts(e);refreshGridState();if(trigger3d)renderAtlas();else scheduleAtlas();if(trigger3d)pulseScan();if(trigger3d&&window.gayDex3D)window.gayDex3D.setEntry(e);}
+function renderEntry(e,trigger3d=true){if(trigger3d&&typeof battleState!=='undefined'&&battleState.mirrorHero){battleState.mirrorHero=false;let b=$('#battleMirror');if(b){b.setAttribute('aria-pressed','false');b.textContent='↥ Mirror battle'}}$('#stage')?.classList.remove('battle-active');if($('#battleStageFallback'))$('#battleStageFallback').hidden=true;state.selected=e.id;state.seen.add(e.id);save();let pct=Math.round(state.seen.size/GAYDEX.length*100);$('#seenCount').textContent=state.seen.size;$('#seenPct').textContent=`${pct}%`;$('#favCount').textContent=state.favs.size;renderLattice();$('#stageNum').textContent=`#${String(e.num).padStart(3,'0')} // ${e.stage.toUpperCase()}`;$('#stageName').textContent=e.name.toUpperCase();$('#fallbackPortrait').src=e.img;$('#fallbackPortrait').alt=`Illustrated ${e.name}`;$('#entryName').textContent=e.name;$('#entryDesc').textContent=e.desc;document.documentElement.style.setProperty('--lineColor',lineColor(e));$('#eyebrow').innerHTML=`<span class="tag">${esc(e.line)} line</span><span class="tag ${designationClass(e.designation)}">${esc(e.designation)}</span><span class="tag">${esc(e.rarity)}</span>`;$('#facts').innerHTML=[['Build',e.build],['Body hair',e.hair],['Life stage',e.age],['Vibe',e.vibe]].map(x=>`<div class="fact"><small>${x[0]}</small><strong>${esc(x[1])}</strong></div>`).join('');$('#stats').innerHTML=e.stats.map((v,i)=>`<div class="stat"><span>${statNames[i]}</span><div class="track"><div class="fill" style="width:${v}%"></div></div><strong>${v}</strong></div>`).join('');$('#evoPath').innerHTML=e.evo.map((id,i)=>{let x=entry(id);return `<button type="button" class="evo-node ${id===e.id?'active':''}" data-evo="${id}">${esc(x.name)}</button>${i<e.evo.length-1?'<span class="arrow">→</span>':''}`}).join('');document.querySelectorAll('[data-evo]').forEach(b=>b.addEventListener('click',()=>selectEntry(b.dataset.evo,true)));let mb=$('#megaBtn');mb.disabled=!e.mega&&e.stage==='Mega';mb.textContent=e.stage==='Mega'?'✦ Mega Active':e.mega?'✦ Mega Shift':'✦ No Mega Route';mb.dataset.mega=e.mega||'';let f=state.favs.has(e.id);$('#favBtn').setAttribute('aria-pressed',String(f));$('#favBtn').textContent=f?'♥ Favorited':'♡ Favorite';let cmp=state.compare.has(e.id);$('#compareBtn').setAttribute('aria-pressed',String(cmp));$('#compareBtn').textContent=cmp?'⊖ Remove compare':'⊕ Compare';scheduleLineageGhosts(e);refreshGridState();if(trigger3d)renderAtlas();else scheduleAtlas();if(trigger3d)pulseScan();if(trigger3d&&window.gayDex3D)window.gayDex3D.setEntry(e);scheduleDuelCard(e)}
 function selectEntry(id,scroll=false){let e=entry(id);if(!e)return;renderEntry(e,true);if(scroll&&innerWidth<981)$('#stage').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'})}
 $('#randomBtn').addEventListener('click',()=>{let pool=GAYDEX.filter(e=>e.stage!=='Mega');selectEntry(pool[Math.floor(Math.random()*pool.length)].id,true);if(window.gayDex3D)window.gayDex3D.burst(.45)});
 $('#megaBtn').addEventListener('click',()=>{let e=entry(state.selected);if(e.stage==='Mega')return;if(e.mega){selectEntry(e.mega,false);$('#stage').classList.remove('burst');void $('#stage').offsetWidth;$('#stage').classList.add('burst');if(window.gayDex3D)window.gayDex3D.burst(1)}});
@@ -177,7 +310,7 @@ function renderBattleTimeline(m){let el=$('#battleTimeline');if(!el)return;let r
 
 function renderBattleReport(m){let el=$('#battleMatchReport');if(!el)return;if(!m?.ended){el.hidden=true;el.innerHTML='';return}el.hidden=false;let winner=m.winner==='draw'?null:m[m.winner],rounds=Math.min(40,m.round),swing=m.momentumSwing,swingText=swing?`Momentum swing // R${swing.round} · ${swing.leader==='even'?'field even':esc(m[swing.leader].entry.name)+' took the edge'} · ${esc(swing.tag)} · ${swing.hpA}/${swing.hpB} HP`:'',card=(f,side)=>{let x=f.metrics||{},win=winner===f,c=battleColorFor(f);return `<div class="match-report-fighter ${win?'winner':''}" style="--winnerColor:${c}"><b>${esc(f.entry.name)}${win?' // WINNER':''}</b><div class="match-report-metrics"><span>HP<strong>${Math.ceil(f.hp)}</strong></span><span>Damage<strong>${x.damage||0}</strong></span><span>Biggest<strong>${x.biggest||0}</strong></span><span>Counters<strong>${x.counters||0}</strong></span><span>Reads<strong>${x.readLocks||0}</strong></span><span>Crits<strong>${x.crits||0}</strong></span><span>Flow breaks<strong>${x.flowBreaks||0}</strong></span><span>Signatures<strong>${x.signatures||0}</strong></span></div></div>`};el.innerHTML=`<div class="match-report-title"><strong>${winner?esc(winner.entry.name)+' controlled the terminal':'Terminal declared a draw'}</strong><small>${rounds} rounds · seed ${m.seed}${swingText?`<br>${swingText}`:''}</small></div><div class="match-report-grid">${card(m.a,'a')}${card(m.b,'b')}</div>`}
 function battleTacticalRead(){let m=battleState.match;if(!m)return '';if(battleState.cpuB&&!m.ended){let last=battleState.lastCpuMove?` LAST COMMIT: ${esc((BATTLE_MOVES[battleState.lastCpuMove]?.name||battleState.lastCpuMove).toUpperCase())} //`:'';return `<span class="neutral"><strong>CPU INTENT HIDDEN</strong> //${last} choose Lineage A's move; Lineage B reads visible history and commits only on Resolve.</span>`};let a=battleState.moveA,b=battleState.moveB,ma=a==='signature'?signatureSpec(m.a,()=>.5).name:BATTLE_MOVES[a]?.name||a,mb=b==='signature'?signatureSpec(m.b,()=>.5).name:BATTLE_MOVES[b]?.name||b,pulse=3-((m.round-1)%3);if(a==='guard'&&b==='guard')return `<span class="neutral">DOUBLE GUARD // both sides bank Hype, but repeated guarding accumulates fatigue. Arena pulse in ${pulse}.</span>`;if(a==='signature'||b==='signature')return `<strong>SIGNATURE WINDOW</strong> // ${esc(ma)} ↔ ${esc(mb)} · initiative and armor still matter.`;if(a==='guard'||b==='guard'){let ss=a==='guard'?'A':'B';return `<span class="neutral">${ss} GUARDS // damage is reduced; consecutive Guard becomes progressively leakier.</span>`}if(a===b)return `<span class="neutral"><strong>CLASH</strong> // matching vectors blunt both attacks. Vary your line to rebuild Flow.</span>`;if(BATTLE_COUNTER[a]===b){let lock=m.b.lastMove===b?' · READ LOCK available':'';return `<span class="edge-a"><strong>A EDGE</strong> // ${esc(ma)} counters ${esc(mb)} · +28% matchup pressure${lock}${battleState.arenaEffects&&battleState.scene==='prism'?' · +6 Hype arena bonus':''}.</span>`}if(BATTLE_COUNTER[b]===a){let lock=m.a.lastMove===a?' · READ LOCK available':'';return `<span class="edge-b"><strong>B EDGE</strong> // ${esc(mb)} counters ${esc(ma)} · +28% matchup pressure${lock}${battleState.arenaEffects&&battleState.scene==='prism'?' · +6 Hype arena bonus':''}.</span>`}return `<span class="neutral">NEUTRAL VECTOR // ${esc(ma)} ↔ ${esc(mb)} · speed, Flow, crit, and arena rule decide the exchange · pulse in ${pulse}.</span>`} 
-function renderBattle(){let m=battleState.match;if(!m)return;syncBattleTheatre();if((m.a.sigCd>0||m.a.hype<100)&&battleState.moveA==='signature')battleState.moveA='flex';if((m.b.sigCd>0||m.b.hype<100)&&battleState.moveB==='signature')battleState.moveB='flex';battleFighterView('a',m.a,battleState.moveA);battleFighterView('b',m.b,battleState.moveB);$('#battleRound').textContent=m.ended?'BATTLE COMPLETE':`ROUND ${m.round}`;$('#battleStatus').textContent=m.ended?battleWinnerText(m):(battleState.cpuB?'Choose Lineage A move. CPU B commits on Resolve.':'Choose both moves.');$('#battleTacticalRead').innerHTML=battleTacticalRead();$('#battleResolve').disabled=m.ended;$('#battleAuto').disabled=m.ended;$('#battleSeries').disabled=battleState.lineA==='Independent'||battleState.lineB==='Independent';$('#battleSeedLabel').textContent=`SEED ${m.seed}`;renderBattleLog(m);renderBattleTimeline(m);renderBattleIntel(m);renderBattleReport(m);battleSetControlsDisabled(false)}
+function renderBattle(){let m=battleState.match;if(!m)return;syncBattleTheatre();if((m.a.sigCd>0||m.a.hype<100)&&battleState.moveA==='signature')battleState.moveA='flex';if((m.b.sigCd>0||m.b.hype<100)&&battleState.moveB==='signature')battleState.moveB='flex';battleFighterView('a',m.a,battleState.moveA);battleFighterView('b',m.b,battleState.moveB);$('#battleRound').textContent=m.ended?'BATTLE COMPLETE':`ROUND ${m.round}`;$('#battleStatus').textContent=m.ended?battleWinnerText(m):(battleState.cpuB?'Choose Lineage A move. CPU B commits on Resolve.':'Choose both moves.');$('#battleTacticalRead').innerHTML=battleTacticalRead();$('#battleResolve').disabled=m.ended;$('#battleAuto').disabled=m.ended;$('#battleSeries').disabled=battleState.lineA==='Independent'||battleState.lineB==='Independent';$('#battleSeedLabel').textContent=`SEED ${m.seed}`;renderBattleLog(m);renderBattleTimeline(m);renderBattleIntel(m);renderBattleReport(m);battleSetControlsDisabled(false);refreshDuelLive()}
 function syncBattleStage(force=false){let m=battleState.match;if(!m||(!force&&!battleState.mirrorHero))return;let st=$('#stage');st.classList.add('battle-active');$('#battleStageFallback').hidden=false;$('#battleStageImgA').src=m.a.entry.img;$('#battleStageImgB').src=m.b.entry.img;$('#stageNum').textContent=`BATTLE SIM // ROUND ${m.round}`;$('#stageName').textContent=`${m.a.entry.name.toUpperCase()} VS ${m.b.entry.name.toUpperCase()}`;window.gayDex3D?.setBattlePair?.(m.a.entry,m.b.entry)}function restoreSpecimenStage(){let e=entry(state.selected);if(!e)return;$('#stage').classList.remove('battle-active');$('#battleStageFallback').hidden=true;$('#stageNum').textContent=`#${String(e.num).padStart(3,'0')} // ${e.stage.toUpperCase()}`;$('#stageName').textContent=e.name.toUpperCase();$('#fallbackPortrait').src=e.img;$('#fallbackPortrait').alt=`Illustrated ${e.name}`;window.gayDex3D?.setEntry?.(e)}
 function resetBattle({preserveSeed=false,skipIntro=false}={}){battleAutoToken++;battleState.balanced=$('#battleBalance').checked;battleState.arenaEffects=$('#battleArenaEffects')?.checked!==false;battleState.lineA=$('#battleLineA').value;battleState.lineB=$('#battleLineB').value;battleState.idA=$('#battleStageA').value;battleState.idB=$('#battleStageB').value;saveBattlePrefs();let seed=preserveSeed&&battleState.match?battleState.match.seed:hashSeed(`${battleState.idA}|${battleState.idB}|${battleState.balanced}|${battleState.scene}|${battleSeedCounter++}`);battleState.match=makeBattleMatch(entry(battleState.idA),entry(battleState.idB),battleState.balanced,seed);warmBattleAssetsForMatch(battleState.match);applyBattleOpener(battleState.match);battleState.moveA='flex';battleState.moveB='serve';battleState.lastCpuMove=null;battleState.lastCpuRead='';renderBattle();syncBattleStage();if(!skipIntro){battleState.introPending=true;if(battleState.fxVisible)setTimeout(()=>{if(battleState.introPending){battleState.introPending=false;playBattleIntro()}},40)}}
 async function resolveBattleRound(){let m=battleState.match;if(!m||m.ended||battleState.animating)return;battleState.introPending=false;if(battleState.cpuB){let pick=chooseCpuBattleMove(m.b,m.a,m.decisionRng,m);battleState.moveB=pick.move;battleState.lastCpuMove=pick.move;battleState.lastCpuRead=pick.reason}let events=battleRound(m,battleState.moveA,battleState.moveB);await animateBattleEvents(events);renderBattle();syncBattleStage()}
@@ -193,7 +326,7 @@ $('#labForm').addEventListener('submit',ev=>{ev.preventDefault();let vals={build
 $('#labReset').addEventListener('click',()=>{$('#labForm').reset();$('#labResult').classList.remove('show');$('#labResult').innerHTML=''});
 $('#stage').addEventListener('pointermove',e=>{let r=$('#stage').getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;$('#stage').style.setProperty('--ry',`${x*9}deg`);$('#stage').style.setProperty('--rx',`${-y*7}deg`)});$('#stage').addEventListener('pointerleave',()=>{$('#stage').style.setProperty('--ry','0deg');$('#stage').style.setProperty('--rx','0deg')});
 document.addEventListener('keydown',e=>{if(hotkeyTargetIsInteractive(e.target)||hotkeyTargetIsInteractive(document.activeElement))return;let i=GAYDEX.findIndex(x=>x.id===state.selected);if(e.key==='ArrowRight')selectEntry(GAYDEX[(i+1)%GAYDEX.length].id,false);if(e.key==='ArrowLeft')selectEntry(GAYDEX[(i-1+GAYDEX.length)%GAYDEX.length].id,false);if(e.key.toLowerCase()==='r')$('#randomBtn').click();if(e.key.toLowerCase()==='m')$('#megaBtn').click();if(e.key.toLowerCase()==='c')$('#compareBtn').click()});
-renderAxisLegend();renderGrid();renderEntry(entry(state.selected),false);renderCompare();initBattleUI();persistStateIntegrity();window.__GAYDEX_BUILD="AWE-XL";window.__GAYDEX_READY=performance.now();
+renderAxisLegend();renderGrid();renderEntry(entry(state.selected),false);renderCompare();initBattleUI();persistStateIntegrity();renderDuelCard(entry(state.selected));window.__GAYDEX_BUILD="AWE-XL";window.__GAYDEX_READY=performance.now();
 
 /* ---------------------------------------------------------------------------
  * Bridge: application layer -> GayDex: Circuit (Three.js).
@@ -214,6 +347,9 @@ window.GayDexApp={
   dex:GAYDEX, atlasLines:ATLAS_LINES, statNames, colors:COLORS, lineColor, esc,
   /* documented axis -> battle-vector contract (verified against the engine) */
   axisLegend:AXIS_VECTORS,
+  /* duel-card model: engine-derived fight vectors for a form (+ optional rival) */
+  duelModel:(id,rivalId)=>{const e=entry(id);if(!e)return null;return duelModel(e,rivalId?entry(rivalId):duelRivalFor(e))},
+  renderDuelCard,
   /* observability: catalogue rebuild/re-filter counts and card inventory */
   renderStats(){return {...renderStats,cards:gridCards.size}},
   entry, stagePassive:BattleCore.stagePassive, lineagePassive:BattleCore.lineagePassive,

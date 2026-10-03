@@ -9,6 +9,7 @@
     "build:check": "node tools/build.mjs --check",
     "roundtrip": "node tools/build.mjs --roundtrip",
     "extract": "node tools/extract-original-engine.mjs",
+    "icons": "node tools/make-icons.mjs",
     "test": "node --test \"tests/*.test.mjs\"",
     "test:engine": "node --test tests/battle-equivalence.test.mjs",
     "test:world": "node --test tests/circuit-world.test.mjs",
