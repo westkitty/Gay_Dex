@@ -1,0 +1,83 @@
+<!-- =====================================================================
+     GayDex: Circuit — the explorable Three.js world.
+     Presentation + interaction only. Canonical data, battle truth and
+     persistence stay in the DOM application below.
+     ================================================================== -->
+<div id="circuitRoot" class="circuit-root" data-state="booting" hidden>
+  <canvas id="circuitCanvas" aria-hidden="true"></canvas>
+  <div class="circuit-vignette" aria-hidden="true"></div>
+
+  <div class="circuit-topbar">
+    <div class="circuit-district" id="circuitDistrictCard">
+      <b id="circuitDistrictName">TRANSIT NEXUS</b>
+      <small id="circuitDistrictBlurb">Booting the lattice…</small>
+    </div>
+    <div class="circuit-telemetry" id="circuitTelemetry" aria-hidden="true">THREE r— · booting</div>
+    <div class="circuit-topbar-actions">
+      <button type="button" class="circuit-chip" id="circuitQualityBtn" aria-label="Graphics quality mode">QUALITY <b>AUTO</b></button>
+      <button type="button" class="circuit-chip" id="circuitMotionBtn" aria-pressed="false" aria-label="Reduce motion">MOTION <b>SYSTEM</b></button>
+      <button type="button" class="circuit-chip" id="circuitSfxBtn" aria-pressed="true" aria-label="Circuit ambience sound">🔊 <b>SFX</b></button>
+      <button type="button" class="circuit-chip" id="circuitNavToggle" aria-expanded="false" aria-controls="circuitNavigator">INDEX</button>
+      <button type="button" class="circuit-chip circuit-chip-exit" id="circuitExit">EXIT TO ATLAS</button>
+    </div>
+  </div>
+
+  <div class="circuit-crosshair" aria-hidden="true"><i></i></div>
+  <div id="circuitPrompt" class="circuit-prompt" role="status" aria-live="polite" hidden></div>
+
+  <!-- Accessible navigator: every specimen and district reachable by keyboard,
+       driving exactly the same 3D camera and selection as spatial input. -->
+  <nav id="circuitNavigator" class="circuit-navigator" aria-label="Circuit index" hidden>
+    <div class="circuit-nav-head">
+      <div><div class="section-title">Accessible route</div><h2>Circuit index</h2></div>
+      <button type="button" class="circuit-chip" id="circuitNavClose">CLOSE ✕</button>
+    </div>
+    <div class="circuit-nav-body" id="circuitNavBody"></div>
+    <p class="circuit-nav-note">Spatial navigation is an enhancement, never a requirement. Every action below has a 3D equivalent and vice versa.</p>
+  </nav>
+
+  <!-- Canonical specimen inspection. Data comes from the GayDex entry, verbatim. -->
+  <section id="circuitInspector" class="circuit-inspector" role="dialog" aria-modal="false" aria-labelledby="circuitInspectorName" hidden>
+    <div class="circuit-inspector-head">
+      <div>
+        <div class="section-title" id="circuitInspectorEyebrow">SPECIMEN</div>
+        <h2 id="circuitInspectorName">—</h2>
+        <p id="circuitInspectorDesc" class="circuit-inspector-desc"></p>
+      </div>
+      <button type="button" class="circuit-chip" id="circuitInspectorClose" aria-label="Close inspection">CLOSE ✕</button>
+    </div>
+    <div class="circuit-inspector-grid">
+      <div class="circuit-inspector-portrait"><img id="circuitInspectorImg" alt=""></div>
+      <div>
+        <dl class="circuit-facts" id="circuitInspectorFacts"></dl>
+        <div class="circuit-stats" id="circuitInspectorStats"></div>
+        <div class="circuit-traits" id="circuitInspectorTraits"></div>
+        <div class="circuit-lineage" id="circuitInspectorLineage"></div>
+      </div>
+    </div>
+    <div class="circuit-inspector-actions" id="circuitInspectorActions"></div>
+  </section>
+
+  <!-- Battle dock: the existing battle terminal's controls, relocated into the
+       arena. The engine that runs the fight is unchanged. -->
+  <div id="circuitBattleHud" class="circuit-battle-hud" hidden>
+    <div class="circuit-battle-fighters">
+      <div class="circuit-fighter side-a" id="circuitFighterA"></div>
+      <div class="circuit-battle-center" id="circuitBattleCenter"></div>
+      <div class="circuit-fighter side-b" id="circuitFighterB"></div>
+    </div>
+    <div class="circuit-battle-moves" id="circuitBattleMoves" role="group" aria-label="Battle moves"></div>
+    <div class="circuit-battle-bar" id="circuitBattleBar"></div>
+  </div>
+
+  <div id="circuitTouch" class="circuit-touch" hidden>
+    <div class="circuit-stick" id="circuitStick" aria-hidden="true"><i id="circuitStickKnob"></i></div>
+    <div class="circuit-touch-actions">
+      <button type="button" class="circuit-touch-btn" id="circuitTouchInteract" aria-label="Interact with the targeted specimen">SCAN</button>
+      <button type="button" class="circuit-touch-btn ghost" id="circuitTouchIndex" aria-label="Open the circuit index">INDEX</button>
+    </div>
+  </div>
+
+  <div id="circuitToast" class="circuit-toast" role="status" aria-live="polite"></div>
+  <div id="circuitFallback" class="circuit-fallback" role="alert" hidden></div>
+</div>
