@@ -86,6 +86,8 @@ export function assemble({ scripts = SCRIPTS, parts = PARTS, banner = true, part
 }
 
 const sha = (s) => createHash('sha256').update(s).digest('hex').slice(0, 16);
+/** Real on-disk size: a JS string length counts UTF-16 code units, not bytes. */
+const byteLen = (str) => Buffer.byteLength(str, 'utf8');
 
 const args = process.argv.slice(2);
 
@@ -110,7 +112,7 @@ if (args.includes('--roundtrip')) {
     rmSync(tmp, { recursive: true, force: true });
   }
   if (rebuilt === original) {
-    console.log(`ROUNDTRIP OK — assembler reproduces the pristine artifact exactly (${original.length} bytes, sha ${sha(original)})`);
+    console.log(`ROUNDTRIP OK — assembler reproduces the pristine artifact exactly (${byteLen(original)} bytes, sha ${sha(original)})`);
     process.exit(0);
   }
   let i = 0;
@@ -127,7 +129,7 @@ const current = (() => { try { return readFileSync(OUT, 'utf8'); } catch { retur
 
 if (args.includes('--check')) {
   if (current === html) {
-    console.log(`BUILD CHECK OK — artifact is current (${html.length} bytes, sha ${sha(html)})`);
+    console.log(`BUILD CHECK OK — artifact is current (${byteLen(html)} bytes, sha ${sha(html)})`);
     process.exit(0);
   }
   console.error('BUILD CHECK FAILED — artifact is stale. Run: node tools/build.mjs');
@@ -136,5 +138,5 @@ if (args.includes('--check')) {
 
 writeFileSync(OUT, html);
 console.log(`BUILT ${OUT}`);
-console.log(`  bytes ${html.length}  gzip ${gzipSync(html).length}  sha ${sha(html)}`);
+console.log(`  bytes ${byteLen(html)}  chars ${html.length}  gzip ${gzipSync(html).length}  sha ${sha(html)}`);
 console.log(`  scripts: ${SCRIPTS.map((s) => s[0]).join(', ')}`);
