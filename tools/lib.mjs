@@ -8,17 +8,49 @@
  * statement about the assembler even after `src/` has been edited.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const PRISTINE_COMMIT = 'cbbe7a32f557f5a4e30424b8df35a79b82a2cf6e';
 export const PRISTINE_ARTIFACT = 'GayDex_Battle_Simulator_SINGLE_FILE.html';
+/** Committed copy of the pristine artifact, written by tools/split-original.mjs. */
+export const PRISTINE_FIXTURE = 'tests/fixtures/original-single-file.html';
 
-/** @returns {{file:string,content:string}[]} */
+/**
+ * Resolve the pristine (pre-Circuit) artifact.
+ *
+ * Git history is the authoritative provenance and is used whenever the object
+ * is present.  A shallow clone, an exported tarball or a CI runner that only
+ * fetched the branch tip will NOT have commit cbbe7a3 in its object store, so
+ * we fall back to the committed byte-identical fixture rather than failing the
+ * whole verification suite.  Set GAYDEX_PRISTINE=fixture to force the fixture
+ * (used by tests to exercise this path) or =git to require history.
+ *
+ * @returns {{html:string, source:string}}
+ */
+export function readPristine(root) {
+  const mode = process.env.GAYDEX_PRISTINE || 'auto';
+  const fixturePath = join(root, PRISTINE_FIXTURE);
+  if (mode !== 'fixture') {
+    try {
+      const html = execFileSync('git', ['show', `${PRISTINE_COMMIT}:${PRISTINE_ARTIFACT}`], {
+        cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { html, source: `git ${PRISTINE_COMMIT.slice(0, 7)}` };
+    } catch (err) {
+      if (mode === 'git') throw new Error(`GAYDEX_PRISTINE=git but ${PRISTINE_COMMIT} is not available: ${err.message}`);
+      if (!existsSync(fixturePath)) {
+        throw new Error(`cannot resolve the pristine artifact: commit ${PRISTINE_COMMIT} is not in this clone and ${PRISTINE_FIXTURE} is missing. Run: git fetch origin ${PRISTINE_COMMIT}`);
+      }
+    }
+  }
+  if (!existsSync(fixturePath)) throw new Error(`missing pristine fixture ${PRISTINE_FIXTURE}`);
+  return { html: readFileSync(fixturePath, 'utf8'), source: PRISTINE_FIXTURE };
+}
+
+/** @returns {{html:string, source:string, parts:{file:string,content:string}[]}} */
 export function splitPristine(root) {
-  const html = execFileSync('git', ['show', `${PRISTINE_COMMIT}:${PRISTINE_ARTIFACT}`], {
-    cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-  });
+  const { html, source } = readPristine(root);
   const L = html.split('\n');
   // 1-indexed layout of the pristine file:
   //   1      <!doctype html>
@@ -39,6 +71,7 @@ export function splitPristine(root) {
 
   return {
     html,
+    source,
     parts: [
       ['src/shell/01-head.html', L.slice(0, 2).join('\n')],
       ['src/shell/02-styles.css', L.slice(2, 154).join('\n')],

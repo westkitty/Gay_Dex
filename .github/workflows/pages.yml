@@ -1,8 +1,9 @@
-name: Deploy GayDex to GitHub Pages
+name: Verify and deploy GayDex
 
 on:
   push:
     branches: ["main"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,11 +12,36 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: "pages-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
+  # Gate: the artifact that ships must first prove it is current, lossless to
+  # assemble, and behaviourally equivalent to the canonical engine.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # tools/build.mjs --roundtrip prefers the pristine commit from history;
+          # a full clone guarantees it resolves instead of falling back.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify (roundtrip assembler + 40 tests + artifact freshness)
+        run: npm run verify
+
   deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -26,8 +52,9 @@ jobs:
 
       - name: Prepare static site
         run: |
-          mkdir -p _site
+          mkdir -p _site/assets
           cp GayDex_Battle_Simulator_SINGLE_FILE.html _site/index.html
+          cp assets/og-card.png assets/icon-512.png _site/assets/
           touch _site/.nojekyll
 
       - name: Configure GitHub Pages

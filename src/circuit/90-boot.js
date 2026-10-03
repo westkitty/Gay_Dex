@@ -13,6 +13,27 @@
   const { clamp, damp } = C.util;
   const $ = (s) => document.querySelector(s);
 
+  /**
+   * Explain, visibly, why the 3D world is unavailable.
+   *
+   * The notice lives outside #circuitRoot (which is [hidden] in this state) —
+   * nesting it inside the world root, as it once was, meant nobody without
+   * WebGL2 ever read it. It is dismissible and never blocks the static
+   * terminal, which is fully functional.
+   */
+  function showFallback(reason) {
+    const fb = document.querySelector('#circuitFallback');
+    if (!fb) return;
+    fb.dataset.reason = String(reason || 'unavailable');
+    fb.innerHTML = '<strong>Circuit offline — this browser has no WebGL2.</strong>'
+      + `<br>Reported: ${reason ? String(reason) : 'unsupported'}.`
+      + '<br>The 3D world is the only thing missing. The atlas, Lineage Atlas, Compare Deck, Evolution Lab and Battle Terminal below all work exactly as normal.'
+      + '<div class="circuit-fallback-actions"><button type="button" class="circuit-btn primary" id="circuitFallbackClose">Continue without 3D</button></div>';
+    fb.hidden = false;
+    const close = fb.querySelector('#circuitFallbackClose');
+    if (close) close.addEventListener('click', () => { fb.hidden = true; });
+  }
+
   function detectSupport() {
     if (!C.hasThree()) return { ok: false, reason: 'three.js did not load' };
     if (typeof document === 'undefined') return { ok: false, reason: 'no document' };
@@ -28,20 +49,47 @@
     }
   }
 
-  function boot() {
+  /**
+   * Boot the Circuit.
+   *
+   * @param {object} [opts] Test seams. Production always calls `boot()` with no
+   *   arguments, which detects real WebGL2 support and builds every subsystem
+   *   from the real factories. The seams exist so the boot wiring itself — the
+   *   camera director, inspector, navigator, battle dock, toasts and teardown —
+   *   can be executed headlessly against a stubbed renderer, because a GPU is
+   *   the one thing a test runner cannot provide.
+   *   @param {object} [opts.support]   Skip WebGL2 probing (result of detectSupport()).
+   *   @param {object} [opts.factories] Override individual `C.createX` factories.
+   */
+  function boot(opts = {}) {
     const App = window.GayDexApp;
-    const support = detectSupport();
+    const F = {
+      createRuntime: C.createRuntime,
+      createWorld: C.createWorld,
+      createSpecimenField: C.createSpecimenField,
+      createCompareRing: C.createCompareRing,
+      createSpatialLab: C.createSpatialLab,
+      createBattleLayer: C.createBattleLayer,
+      createInput: C.createInput,
+      ...(opts.factories || {}),
+    };
+    const support = opts.support || detectSupport();
     const root = $('#circuitRoot');
     const enterBtn = $('#circuitEnterBtn');
     const pill = $('#enginePill');
 
     if (!support.ok) {
       if (pill) pill.innerHTML = '3D <strong>static fallback</strong>';
-      if (enterBtn) { enterBtn.disabled = true; enterBtn.textContent = '⬢ Circuit unavailable'; enterBtn.title = support.reason; }
+      // Stay clickable: a disabled control hides the only explanation a user
+      // would get. Clicking now re-opens the notice.
+      if (enterBtn) {
+        enterBtn.disabled = false;
+        enterBtn.innerHTML = '⬢ <strong>Why is 3D off?</strong>';
+        enterBtn.addEventListener('click', () => showFallback(support.reason));
+      }
       const st = $('#engineStatus');
       if (st) st.textContent = 'HOLO ENGINE: STATIC FALLBACK';
-      const fb = $('#circuitFallback');
-      if (fb) { fb.hidden = false; fb.innerHTML = `<strong>Circuit offline.</strong> ${support.reason}. The full GayDex atlas, Lineage Atlas, comparison deck, Evolution Lab and Battle Terminal below are unaffected — nothing is lost, only the 3D world.`; }
+      showFallback(support.reason);
       return null;
     }
 
@@ -51,17 +99,20 @@
     const adapter = C.createAdapter(App);
     const canvas = $('#circuitCanvas');
 
-    const runtime = C.createRuntime(THREE, canvas, {
+    const runtime = F.createRuntime(THREE, canvas, {
       quality: adapter.prefs.quality,
       onContextLost: () => toast('WebGL context lost — suspending the Circuit.', 'warn'),
       onContextRestored: () => toast('WebGL context restored — resuming.', 'ok'),
     });
 
-    const assets = C.createAssets(THREE, { textureBudget: 26, labelBudget: 44 });
+    // Budget covers the live working set: 19 canonical portraits + 10 arena
+    // avatars. A smaller budget made the LRU evict art that materials still
+    // referenced, forcing pointless re-uploads when districts changed.
+    const assets = C.createAssets(THREE, { textureBudget: 34, labelBudget: 44 });
     assets.setAnisotropy(Math.min(4, runtime.maxAnisotropy));
     runtime.setReducedMotion(reducedWanted());
 
-    const world = C.createWorld(THREE, { assets });
+    const world = F.createWorld(THREE, { assets });
 
     // Evolution geography. The pad positions are authored in C.ROUTES; the
     // forms standing on them come from the canonical lineage tables, so the
@@ -72,7 +123,7 @@
     }
 
     // Specimens placed on their lineage routes.
-    const specimens = C.createSpecimenField(THREE, { assets, world });
+    const specimens = F.createSpecimenField(THREE, { assets, world });
     for (const [line, route] of Object.entries(world.routes)) {
       for (const n of route.nodes) specimens.add(n.entry, n.world, { district: route.district, line });
     }
@@ -84,9 +135,13 @@
     }
     for (const e of adapter.entries()) specimens.setDiscovered(e.id, adapter.isDiscovered(e.id));
 
-    const compare = C.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
-    const lab = C.createSpatialLab(THREE, { world, assets, adapter });
-    const battle = C.createBattleLayer(THREE, { runtime, world, assets });
+    // Portrait decodes are deferred; trickle the rest in during idle time so the
+    // boot path stays light but nothing is ever missing when a player travels.
+    const cancelPrewarm = assets.prewarm(adapter.entries().map((e) => e.img), { perCallback: 4 });
+
+    const compare = F.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
+    const lab = F.createSpatialLab(THREE, { world, assets, adapter });
+    const battle = F.createBattleLayer(THREE, { runtime, world, assets });
 
     /* ---- camera director ---------------------------------------------- */
     const director = {
@@ -158,7 +213,7 @@
     }
 
     /* ---- input --------------------------------------------------------- */
-    const input = C.createInput(THREE, {
+    const input = F.createInput(THREE, {
       runtime, canvas,
       getTargets: undefined,
       onTarget: (kind, id) => renderPrompt(kind, id),
@@ -183,6 +238,8 @@
 
     /* ---- interaction --------------------------------------------------- */
     let inspecting = null;
+    /** Element that opened the inspector, so focus can be handed back. */
+    let inspectorReturnFocus = null;
 
     function handleInteract(kind, id) {
       if (kind === 'specimen') { openInspector(id); return; }
@@ -218,16 +275,28 @@
       if (pos) flyTo(pos[0] + 6.5, pos[1] + 8.5, e.name, { yaw: Math.atan2(pos[0] - (pos[0] + 6.5), pos[1] - (pos[1] + 8.5)), dur: 0.8 });
       renderInspector(e);
       const panel = $('#circuitInspector');
-      if (panel) { panel.hidden = false; const c = $('#circuitInspectorClose'); if (c) c.focus(); }
+      if (panel) {
+        // Remember where focus came from so closing the dialog gives it back
+        // instead of dumping the user at the top of the document.
+        if (panel.hidden) inspectorReturnFocus = document.activeElement;
+        panel.hidden = false;
+        const c = $('#circuitInspectorClose');
+        if (c) c.focus();
+      }
     }
 
     function closeInspector() {
       if (inspecting) specimens.setInspecting(inspecting, false);
       inspecting = null;
       const panel = $('#circuitInspector');
+      const wasOpen = panel && !panel.hidden;
       if (panel) panel.hidden = true;
       input.clearTarget();
       renderPrompt(null, null);
+      if (wasOpen && inspectorReturnFocus && typeof inspectorReturnFocus.focus === 'function' && document.contains(inspectorReturnFocus)) {
+        inspectorReturnFocus.focus();
+      }
+      inspectorReturnFocus = null;
     }
 
     function renderInspector(e) {
@@ -572,8 +641,10 @@
       if (el) {
         el.textContent = `THREE r${t.version} · ${t.fps} FPS · ${t.frameMs}ms · ${t.calls} calls · ${(t.triangles / 1000).toFixed(1)}k tris · ${t.textures} tex · ${t.geometries} geo · ${t.programs} prog · DPR ${t.dpr} · ${t.qualityLabel}`;
       }
+      // Only the visible HUD is written; when it is closed the DOM layer's own
+      // sampler is idle too, so nothing formats telemetry nobody is reading.
       const hud = $('#perfHud');
-      if (hud) hud.innerHTML = `FPS ${t.fps}<br>CALLS ${t.calls}<br>TRIS ${(t.triangles / 1000).toFixed(1)}k<br>TEX ${t.textures}<br>GEO ${t.geometries}<br>PROG ${t.programs}<br>DPR ${t.dpr}`;
+      if (hud && hud.classList.contains('show')) hud.innerHTML = `FPS ${t.fps}<br>CALLS ${t.calls}<br>TRIS ${(t.triangles / 1000).toFixed(1)}k<br>TEX ${t.textures}<br>GEO ${t.geometries}<br>PROG ${t.programs}<br>DPR ${t.dpr}<br>3D ${t.qualityLabel}`;
       const st = $('#engineStatus');
       if (st) st.textContent = `HOLO ENGINE: GAYDEX CIRCUIT // THREE r${t.version} // ${t.qualityLabel}`;
     });
@@ -779,6 +850,7 @@
     function dispose() {
       if (disposed) return;
       disposed = true;
+      cancelPrewarm();
       input.dispose();
       circuitMode.dispose();
       lab.dispose();
@@ -805,6 +877,7 @@
 
   C.boot = boot;
   C.detectSupport = detectSupport;
+  C.showFallback = showFallback;
 })(window.GayDexCircuit);
 
 /* ---------------------------------------------------------------------------
@@ -825,11 +898,7 @@
       const root = document.querySelector('#circuitRoot');
       if (root) root.hidden = true;
       document.body.classList.remove('circuit-on');
-      const fb = document.querySelector('#circuitFallback');
-      if (fb) {
-        fb.hidden = false;
-        fb.innerHTML = '<strong>Circuit failed to start.</strong> The GayDex atlas, comparison deck, Evolution Lab and Battle Terminal below are fully functional.';
-      }
+      showFallback(`startup error: ${(err && err.message) || err}`);
       const pill = document.querySelector('#enginePill');
       if (pill) pill.innerHTML = '3D <strong>static fallback</strong>';
       window.dispatchEvent(new CustomEvent('gaydex:circuit-ready', { detail: window.GayDexCircuitState }));

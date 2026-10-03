@@ -51,7 +51,9 @@
       group.name = 'specimen-' + entry.id;
       root.add(group);
 
-      const portraitTex = assets.get(entry.img);
+      // Deferred: the decode starts when the form is actually in view (or on
+      // the idle prewarm pass), not while the page is still booting.
+      const portraitTex = assets.get(entry.img, { defer: true });
       const rimTex = portraitTex;
 
       // Portrait plane (canonical art, transparent).
@@ -181,6 +183,12 @@
 
         const visualActive = dist < 52 || s.inspecting || s.selected;
         s.group.visible = visualActive;
+        // Decode the portrait only once it can plausibly be seen (or when it is
+        // selected/inspected), so nineteen portraits are not decoded at boot.
+        if (visualActive && !s.portraitReady) {
+          s.portraitReady = true;
+          assets.ensure(s.entry.img);
+        }
         if (!visualActive) {
           s.near = damp(s.near, 0, 4, dt);
           culled++;

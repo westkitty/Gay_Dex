@@ -33,7 +33,7 @@
     let anisotropyCap = 1;
     let disposed = false;
     const pending = [];
-    const stats = { created: 0, evicted: 0, labels: 0, decodeFailures: 0 };
+    const stats = { created: 0, evicted: 0, labels: 0, decodeFailures: 0, deferred: 0, decoded: 0 };
 
     function setAnisotropy(cap) { anisotropyCap = Math.max(1, cap | 0); }
 
@@ -48,21 +48,44 @@
     }
 
     /**
-     * Get (or create) a texture for a data-URL/asset source.
-     * Synchronous handle; upgraded when the image decodes.
+     * Get (or create) a texture handle for an asset source.
+     *
+     * Synchronous handle, upgraded in place when the image decodes, so callers
+     * never hold null and scene construction never blocks.
+     *
+     * `opts.defer` returns the handle WITHOUT starting the decode. That matters
+     * for the nineteen specimen portraits: decoding all of them while the page
+     * is still booting costs megabytes of bitmap memory and CPU time the player
+     * has not asked for yet, and only one district is on screen anyway. Call
+     * `ensure(src)` when the portrait actually needs to exist, or `prewarm()`
+     * to trickle the rest in during idle time.
      */
-    function get(src) {
+    function get(src, opts = {}) {
       if (!src) return null;
       if (disposed) return null;
       const hit = textures.get(src);
-      if (hit) { hit.hits++; promote(src); return hit.texture; }
+      if (hit) {
+        hit.hits++;
+        promote(src);
+        if (!opts.defer) ensure(src);
+        return hit.texture;
+      }
 
       const texture = placeholderTexture();
-      const record = { texture, image: null, state: 'loading', hits: 1 };
+      const record = { texture, image: null, state: opts.defer ? 'queued' : 'loading', hits: 1, src };
       textures.set(src, record);
       stats.created++;
+      if (opts.defer) stats.deferred++;
       evictIfNeeded();
+      if (!opts.defer) startDecode(src, record);
+      return texture;
+    }
 
+    /** Begin (or restart) the decode for an existing record. */
+    function startDecode(src, record) {
+      if (disposed || !record || record.state === 'loading' || record.state === 'ready') return;
+      const texture = record.texture;
+      record.state = 'loading';
       const img = new Image();
       img.decoding = 'async';
       record.image = img;
@@ -79,6 +102,7 @@
         texture.anisotropy = anisotropyCap;
         texture.needsUpdate = true;
         live.state = 'ready';
+        stats.decoded++;
         pending.push(texture);
       };
       img.onerror = () => {
@@ -87,7 +111,45 @@
         if (live) live.state = 'error';
       };
       img.src = src;
-      return texture;
+    }
+
+    /** Make sure `src` is being decoded (no-op when it already is, or is done). */
+    function ensure(src) {
+      if (!src || disposed) return null;
+      const rec = textures.get(src);
+      if (!rec) { get(src); return textures.get(src).texture; }
+      startDecode(src, rec);
+      return rec.texture;
+    }
+
+    /* ---- idle prewarm ---------------------------------------------------
+     * Walk a list of sources during idle time, a few per callback, so the
+     * critical path stays light while nothing is ever missing later. Falls
+     * back to a timer where requestIdleCallback does not exist. */
+    let prewarmHandle = 0;
+    let prewarmCancelled = false;
+    function prewarm(sources, opts2 = {}) {
+      const queue = [...new Set((sources || []).filter(Boolean))];
+      const per = Math.max(1, opts2.perCallback || 4);
+      prewarmCancelled = false;
+      const schedule = typeof requestIdleCallback === 'function'
+        ? (fn) => requestIdleCallback(fn, { timeout: 900 })
+        : (fn) => setTimeout(fn, 32);
+      const step = () => {
+        if (disposed || prewarmCancelled) return;
+        for (let i = 0; i < per && queue.length; i++) ensure(queue.shift());
+        if (queue.length) prewarmHandle = schedule(step);
+        else prewarmHandle = 0;
+      };
+      prewarmHandle = schedule(step);
+      return () => { prewarmCancelled = true; prewarmHandle = 0; };
+    }
+
+    /** Resolve when every queued decode has settled (used by tests/telemetry). */
+    function statsSnapshot() {
+      const out = { queued: 0, loading: 0, ready: 0, error: 0, evicted: 0 };
+      textures.forEach((r) => { out[r.state] = (out[r.state] || 0) + 1; });
+      return out;
     }
 
     /** Textures whose image just finished decoding; the runtime flushes this. */
@@ -298,7 +360,12 @@
 
     function dispose() {
       disposed = true;
-      textures.forEach((rec) => rec.texture.dispose());
+      prewarmCancelled = true;
+      prewarmHandle = 0;
+      textures.forEach((rec) => {
+        if (rec.image) { rec.image.onload = null; rec.image.onerror = null; }
+        rec.texture.dispose();
+      });
       textures.clear();
       labels.forEach((t) => t.dispose());
       labels.clear();
@@ -308,7 +375,7 @@
     }
 
     return {
-      get, takeUpdated, label, specimenMaterial, cloneMaterialFor, setAnisotropy,
+      get, ensure, prewarm, statsSnapshot, takeUpdated, label, specimenMaterial, cloneMaterialFor, setAnisotropy,
       registerModelLoader, loadModel, report, dispose,
       get stats() { return stats; },
       get count() { return textures.size; },
