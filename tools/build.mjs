@@ -95,7 +95,7 @@ if (args.includes('--roundtrip')) {
   // Prove the assembler is lossless: split the pristine commit into a
   // throwaway directory, re-assemble from there, compare to the pristine bytes.
   // Independent of whatever `src/` currently contains.
-  const { html: original, parts: pristineParts } = splitPristine(ROOT);
+  const { html: original, parts: pristineParts, source } = splitPristine(ROOT);
   const tmp = mkdtempSync(join(tmpdir(), 'gaydex-roundtrip-'));
   let rebuilt;
   try {
@@ -112,7 +112,7 @@ if (args.includes('--roundtrip')) {
     rmSync(tmp, { recursive: true, force: true });
   }
   if (rebuilt === original) {
-    console.log(`ROUNDTRIP OK — assembler reproduces the pristine artifact exactly (${byteLen(original)} bytes, sha ${sha(original)})`);
+    console.log(`ROUNDTRIP OK — assembler reproduces the pristine artifact exactly (${byteLen(original)} bytes, sha ${sha(original)}, source ${source})`);
     process.exit(0);
   }
   let i = 0;
@@ -127,9 +127,22 @@ if (args.includes('--roundtrip')) {
 const html = assemble();
 const current = (() => { try { return readFileSync(OUT, 'utf8'); } catch { return null; } })();
 
+/**
+ * Hard ceiling on the artifact. The single-file promise is only useful while
+ * the file stays small enough to open instantly on a phone; this catches an
+ * accidental multi-megabyte inlining long before it ships.
+ */
+const MAX_BYTES = 6 * 1024 * 1024;
+const bytes = byteLen(html);
+const gzipBytes = gzipSync(html).length;
+
 if (args.includes('--check')) {
+  if (bytes > MAX_BYTES) {
+    console.error(`BUILD CHECK FAILED — artifact is ${(bytes / 1048576).toFixed(2)} MiB, over the ${(MAX_BYTES / 1048576).toFixed(0)} MiB single-file budget.`);
+    process.exit(1);
+  }
   if (current === html) {
-    console.log(`BUILD CHECK OK — artifact is current (${byteLen(html)} bytes, sha ${sha(html)})`);
+    console.log(`BUILD CHECK OK — artifact is current (${bytes} bytes, gzip ${(gzipBytes / 1024).toFixed(0)} KiB, sha ${sha(html)})`);
     process.exit(0);
   }
   console.error('BUILD CHECK FAILED — artifact is stale. Run: node tools/build.mjs');
@@ -138,5 +151,5 @@ if (args.includes('--check')) {
 
 writeFileSync(OUT, html);
 console.log(`BUILT ${OUT}`);
-console.log(`  bytes ${byteLen(html)}  chars ${html.length}  gzip ${gzipSync(html).length}  sha ${sha(html)}`);
+console.log(`  bytes ${bytes}  chars ${html.length}  gzip ${gzipBytes}  sha ${sha(html)}`);
 console.log(`  scripts: ${SCRIPTS.map((s) => s[0]).join(', ')}`);

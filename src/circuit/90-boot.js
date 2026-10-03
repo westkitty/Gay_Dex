@@ -28,9 +28,31 @@
     }
   }
 
-  function boot() {
+  /**
+   * Boot the Circuit.
+   *
+   * @param {object} [opts] Test seams. Production always calls `boot()` with no
+   *   arguments, which detects real WebGL2 support and builds every subsystem
+   *   from the real factories. The seams exist so the boot wiring itself — the
+   *   camera director, inspector, navigator, battle dock, toasts and teardown —
+   *   can be executed headlessly against a stubbed renderer, because a GPU is
+   *   the one thing a test runner cannot provide.
+   *   @param {object} [opts.support]   Skip WebGL2 probing (result of detectSupport()).
+   *   @param {object} [opts.factories] Override individual `C.createX` factories.
+   */
+  function boot(opts = {}) {
     const App = window.GayDexApp;
-    const support = detectSupport();
+    const F = {
+      createRuntime: C.createRuntime,
+      createWorld: C.createWorld,
+      createSpecimenField: C.createSpecimenField,
+      createCompareRing: C.createCompareRing,
+      createSpatialLab: C.createSpatialLab,
+      createBattleLayer: C.createBattleLayer,
+      createInput: C.createInput,
+      ...(opts.factories || {}),
+    };
+    const support = opts.support || detectSupport();
     const root = $('#circuitRoot');
     const enterBtn = $('#circuitEnterBtn');
     const pill = $('#enginePill');
@@ -51,7 +73,7 @@
     const adapter = C.createAdapter(App);
     const canvas = $('#circuitCanvas');
 
-    const runtime = C.createRuntime(THREE, canvas, {
+    const runtime = F.createRuntime(THREE, canvas, {
       quality: adapter.prefs.quality,
       onContextLost: () => toast('WebGL context lost — suspending the Circuit.', 'warn'),
       onContextRestored: () => toast('WebGL context restored — resuming.', 'ok'),
@@ -61,7 +83,7 @@
     assets.setAnisotropy(Math.min(4, runtime.maxAnisotropy));
     runtime.setReducedMotion(reducedWanted());
 
-    const world = C.createWorld(THREE, { assets });
+    const world = F.createWorld(THREE, { assets });
 
     // Evolution geography. The pad positions are authored in C.ROUTES; the
     // forms standing on them come from the canonical lineage tables, so the
@@ -72,7 +94,7 @@
     }
 
     // Specimens placed on their lineage routes.
-    const specimens = C.createSpecimenField(THREE, { assets, world });
+    const specimens = F.createSpecimenField(THREE, { assets, world });
     for (const [line, route] of Object.entries(world.routes)) {
       for (const n of route.nodes) specimens.add(n.entry, n.world, { district: route.district, line });
     }
@@ -84,9 +106,9 @@
     }
     for (const e of adapter.entries()) specimens.setDiscovered(e.id, adapter.isDiscovered(e.id));
 
-    const compare = C.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
-    const lab = C.createSpatialLab(THREE, { world, assets, adapter });
-    const battle = C.createBattleLayer(THREE, { runtime, world, assets });
+    const compare = F.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
+    const lab = F.createSpatialLab(THREE, { world, assets, adapter });
+    const battle = F.createBattleLayer(THREE, { runtime, world, assets });
 
     /* ---- camera director ---------------------------------------------- */
     const director = {
@@ -158,7 +180,7 @@
     }
 
     /* ---- input --------------------------------------------------------- */
-    const input = C.createInput(THREE, {
+    const input = F.createInput(THREE, {
       runtime, canvas,
       getTargets: undefined,
       onTarget: (kind, id) => renderPrompt(kind, id),
@@ -572,8 +594,10 @@
       if (el) {
         el.textContent = `THREE r${t.version} · ${t.fps} FPS · ${t.frameMs}ms · ${t.calls} calls · ${(t.triangles / 1000).toFixed(1)}k tris · ${t.textures} tex · ${t.geometries} geo · ${t.programs} prog · DPR ${t.dpr} · ${t.qualityLabel}`;
       }
+      // Only the visible HUD is written; when it is closed the DOM layer's own
+      // sampler is idle too, so nothing formats telemetry nobody is reading.
       const hud = $('#perfHud');
-      if (hud) hud.innerHTML = `FPS ${t.fps}<br>CALLS ${t.calls}<br>TRIS ${(t.triangles / 1000).toFixed(1)}k<br>TEX ${t.textures}<br>GEO ${t.geometries}<br>PROG ${t.programs}<br>DPR ${t.dpr}`;
+      if (hud && hud.classList.contains('show')) hud.innerHTML = `FPS ${t.fps}<br>CALLS ${t.calls}<br>TRIS ${(t.triangles / 1000).toFixed(1)}k<br>TEX ${t.textures}<br>GEO ${t.geometries}<br>PROG ${t.programs}<br>DPR ${t.dpr}<br>3D ${t.qualityLabel}`;
       const st = $('#engineStatus');
       if (st) st.textContent = `HOLO ENGINE: GAYDEX CIRCUIT // THREE r${t.version} // ${t.qualityLabel}`;
     });
