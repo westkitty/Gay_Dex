@@ -4916,7 +4916,24 @@ function renderCompare(){let dock=$('#compareDock');if(!dock)return;let ids=[...
 function toggleCompare(id){let evicted=null;if(state.compare.has(id)){state.compare.delete(id)}else{if(state.compare.size>=3){evicted=[...state.compare][0];state.compare.delete(evicted)}state.compare.add(id)}save();renderCompare();if(evicted)document.querySelector(`#dexGrid .card[data-id="${CSS.escape(evicted)}"]`)?.classList.remove('comparing');document.querySelector(`#dexGrid .card[data-id="${CSS.escape(id)}"]`)?.classList.toggle('comparing',state.compare.has(id));let active=state.compare.has(state.selected);$('#compareBtn')?.setAttribute('aria-pressed',String(active));if($('#compareBtn'))$('#compareBtn').textContent=active?'⊖ Remove compare':'⊕ Compare'}
 function renderLineageGhosts(e){let i=e.evo.indexOf(e.id),prev=i>0?entry(e.evo[i-1]):null,next=i>=0&&i<e.evo.length-1?entry(e.evo[i+1]):null;let draw=(sel,x,label)=>{let el=$(sel);if(!el)return;if(!x){el.innerHTML='';return}el.innerHTML=`<img src="${x.img}" alt="" loading="lazy" decoding="async"><small>${label}: ${esc(x.name)}</small>`};draw('#lineagePrev',prev,'PREV');draw('#lineageNext',next,'NEXT')}let lineageGhostTimer=0;function scheduleLineageGhosts(e){clearTimeout(lineageGhostTimer);let id=e.id;lineageGhostTimer=setTimeout(()=>{if(state.selected===id)renderLineageGhosts(e)},70)}let lastScan=0;function pulseScan(){let now=performance.now();if(now-lastScan<180||matchMedia('(prefers-reduced-motion: reduce)').matches)return;lastScan=now;let beam=$('.scan-sweep');if(!beam?.animate)return;beam.getAnimations().forEach(a=>a.cancel());beam.animate([{transform:'translateY(-80%)',opacity:0},{opacity:.9,offset:.1},{transform:'translateY(430%)',opacity:0}],{duration:620,easing:'cubic-bezier(.2,.7,.2,1)'})}
 
-function renderGrid(){let q=$('#search').value.trim().toLowerCase(),line=$('#lineFilter').value,stat=$('#statusFilter').value,quick=state.quick||'all';let list=GAYDEX.filter(e=>(line==='all'||e.line===line)&&(stat==='all'||e.designation===stat)&&(quick==='all'||(quick==='unseen'&&!state.seen.has(e.id))||(quick==='faves'&&state.favs.has(e.id)))&&(!q||[e.name,e.desc,e.build,e.hair,e.age,e.vibe,e.line,e.designation,...e.traits].join(' ').toLowerCase().includes(q)));$('#dexGrid').innerHTML=list.length?list.map(e=>`<button type="button" class="card ${e.id===state.selected?'selected':''} ${state.seen.has(e.id)?'seen':''} ${state.compare.has(e.id)?'comparing':''}" style="--cardColor:${lineColor(e)}" data-id="${e.id}" aria-label="Open ${esc(e.name)}"><span class="seen-dot"></span><img src="${e.img}" alt="Illustrated ${esc(e.name)}" loading="lazy" decoding="async"><div class="card-body"><div class="number">#${String(e.num).padStart(3,'0')} · ${esc(e.stage)}</div><h3>${esc(e.name)}</h3><div class="micro"><span>${esc(e.line)}</span><span>${esc(e.rarity)}</span></div></div></button>`).join(''):'<div class="empty">'+(GAYDEX.length?`${q?`Nothing in the dex matches \u201c${esc(q)}\u201d.`:quick==='faves'?'No favorites pinned yet. Tap \u2661 Favorite on any form to build a shortlist.':quick==='unseen'?'Every form on record has been observed. Nothing left to scan.':'No specimens matched. Reduce the taxonomy until the gays reappear.'} <button type="button" class="btn" id="emptyResetBtn">${quick==='all'&&!q?'Show all 19':'Back to all 19'}</button>`:'No entries loaded.')+'</div>';document.querySelectorAll('.card').forEach(b=>b.addEventListener('click',()=>selectEntry(b.dataset.id,true)));const er=$('#emptyResetBtn');if(er)er.addEventListener('click',()=>clearGridFilters())}
+/* ---- Dex grid -----------------------------------------------------------
+ * The grid is built ONCE and then filtered by toggling state on the existing
+ * nodes. Rebuilding it on every keystroke used to re-create nineteen cards,
+ * nineteen <img> elements and thirty-eight listeners per search character,
+ * which is why typing felt heavy. Cards keep their identity (and their decoded
+ * portraits) for the life of the page; filtering is now attribute-only work,
+ * coalesced to one pass per animation frame.
+ */
+let gridBuilt=false,gridCards=new Map(),gridPump=0;
+/* Render observability: how many times the catalogue was actually rebuilt vs
+ * re-filtered. Cheap to keep, and it is how the reuse guarantee is measured. */
+const renderStats={gridBuilds:0,gridRenders:0};
+function gridCardHtml(e){return `<button type="button" class="card ${e.id===state.selected?'selected':''} ${state.seen.has(e.id)?'seen':''} ${state.compare.has(e.id)?'comparing':''}" style="--cardColor:${lineColor(e)}" data-id="${e.id}" aria-label="Open ${esc(e.name)}"><span class="seen-dot"></span><img src="${e.img}" alt="Illustrated ${esc(e.name)}" loading="lazy" decoding="async"><div class="card-body"><div class="number">#${String(e.num).padStart(3,'0')} · ${esc(e.stage)}</div><h3>${esc(e.name)}</h3><div class="micro"><span>${esc(e.line)}</span><span>${esc(e.rarity)}</span></div></div></button>`}
+function buildGrid(){if(gridBuilt)return;const grid=$('#dexGrid');if(!grid)return;renderStats.gridBuilds++;grid.innerHTML='<div class="empty" id="dexEmpty" role="status" hidden></div>';for(const e of GAYDEX){const holder=document.createElement('div');holder.innerHTML=gridCardHtml(e);const card=holder.firstElementChild;grid.appendChild(card);gridCards.set(e.id,card)}grid.addEventListener('click',ev=>{const reset=ev.target.closest('[data-grid-reset]');if(reset){clearGridFilters();return}const card=ev.target.closest('.card');if(card&&card.dataset.id)selectEntry(card.dataset.id,true)});gridBuilt=true}
+function gridEmptyMessage(q,quick){if(!GAYDEX.length)return 'No entries loaded.';const why=q?`Nothing in the dex matches \u201c${esc(q)}\u201d.`:quick==='faves'?'No favorites pinned yet. Tap \u2661 Favorite on any form to build a shortlist.':quick==='unseen'?'Every form on record has been observed. Nothing left to scan.':'No specimens matched. Reduce the taxonomy until the gays reappear.';return why+` <button type="button" class="btn" data-grid-reset>${quick==='all'&&!q?'Show all 19':'Back to all 19'}</button>`}
+function renderGrid(){buildGrid();renderStats.gridRenders++;let q=$('#search').value.trim().toLowerCase(),line=$('#lineFilter').value,stat=$('#statusFilter').value,quick=state.quick||'all';let list=GAYDEX.filter(e=>(line==='all'||e.line===line)&&(stat==='all'||e.designation===stat)&&(quick==='all'||(quick==='unseen'&&!state.seen.has(e.id))||(quick==='faves'&&state.favs.has(e.id)))&&(!q||[e.name,e.desc,e.build,e.hair,e.age,e.vibe,e.line,e.designation,...e.traits].join(' ').toLowerCase().includes(q)));let shown=0;for(const [id,card] of gridCards){const on=list.length>0&&list.indexOf(entry(id))>=0;if(on)shown++;if(card.hidden===on)card.hidden=!on;card.classList.toggle('selected',id===state.selected);card.classList.toggle('seen',state.seen.has(id));card.classList.toggle('comparing',state.compare.has(id))}const emp=$('#dexEmpty');if(emp){const msg=shown?'':gridEmptyMessage(q,quick);if(msg&&emp.dataset.msg!==msg){emp.innerHTML=msg;emp.dataset.msg=msg}else if(!msg&&emp.dataset.msg){emp.innerHTML='';emp.dataset.msg=''}emp.hidden=!!shown}}
+/** Coalesce typing into one grid pass per frame instead of one per keystroke. */
+function scheduleGridRender(){if(gridPump)return;gridPump=requestAnimationFrame(()=>{gridPump=0;renderGrid()})}
 /* One definition of "show me everything", shared by the toolbar, the empty
  * state and the lattice. */
 function clearGridFilters(){$('#search').value='';$('#lineFilter').value='all';$('#statusFilter').value='all';setQuickFilter('all')}
@@ -4937,7 +4954,7 @@ $('#randomBtn').addEventListener('click',()=>{let pool=GAYDEX.filter(e=>e.stage!
 $('#megaBtn').addEventListener('click',()=>{let e=entry(state.selected);if(e.stage==='Mega')return;if(e.mega){selectEntry(e.mega,false);$('#stage').classList.remove('burst');void $('#stage').offsetWidth;$('#stage').classList.add('burst');if(window.gayDex3D)window.gayDex3D.burst(1)}});
 $('#favBtn').addEventListener('click',()=>{let id=state.selected;state.favs.has(id)?state.favs.delete(id):state.favs.add(id);save();renderEntry(entry(id),false);if(state.quick==='faves')renderGrid()});$('#compareBtn').addEventListener('click',()=>toggleCompare(state.selected));$('#clearCompare').addEventListener('click',()=>{state.compare.clear();save();renderCompare();document.querySelectorAll('#dexGrid .card.comparing').forEach(x=>x.classList.remove('comparing'));renderEntry(entry(state.selected),false)});$('#compareBattle').addEventListener('click',()=>{let ids=[...state.compare].filter(id=>entry(id)).slice(0,2);if(ids.length<2)return;let a=entry(ids[0]),b=entry(ids[1]);$('#battleLineA').value=a.line;populateBattleStages('A',a.line,a.id);$('#battleStageA').value=a.id;$('#battleLineB').value=b.line;populateBattleStages('B',b.line,b.id);$('#battleStageB').value=b.id;resetBattle();$('#battleTerminal').scrollIntoView({behavior:battleReducedMotion()?'auto':'smooth',block:'start'});battleAnnounce('COMPARE → BATTLE',`${a.name} vs ${b.name}`,'neutral')});$('#atlasToggle').addEventListener('click',()=>{state.atlasOpen=!state.atlasOpen;renderAtlas()});
 $('#shareLikeBtn').addEventListener('click',async()=>{let name=entry(state.selected).name;try{await navigator.clipboard.writeText(name);$('#shareLikeBtn').textContent='✓ Copied';setTimeout(()=>$('#shareLikeBtn').textContent='⌁ Copy entry name',900)}catch{$('#shareLikeBtn').textContent=name;setTimeout(()=>$('#shareLikeBtn').textContent='⌁ Copy entry name',1200)}});
-['search','lineFilter','statusFilter'].forEach(id=>$('#'+id).addEventListener(id==='search'?'input':'change',renderGrid));$('#clearBtn').addEventListener('click',clearGridFilters);
+$('#search').addEventListener('input',scheduleGridRender);['lineFilter','statusFilter'].forEach(id=>$('#'+id).addEventListener('change',renderGrid));$('#clearBtn').addEventListener('click',clearGridFilters);
 $('#perfBtn').addEventListener('click',()=>setPerfHud(!state.perf));
 /* ---- Perf HUD in the no-WebGL path ------------------------------------
  * With the Circuit running, the HUD is written from real GPU telemetry
@@ -5042,6 +5059,8 @@ window.GayDexApp={
   dex:GAYDEX, atlasLines:ATLAS_LINES, statNames, colors:COLORS, lineColor, esc,
   /* documented axis -> battle-vector contract (verified against the engine) */
   axisLegend:AXIS_VECTORS,
+  /* observability: catalogue rebuild/re-filter counts and card inventory */
+  renderStats(){return {...renderStats,cards:gridCards.size}},
   entry, stagePassive:BattleCore.stagePassive, lineagePassive:BattleCore.lineagePassive,
   signatureSpec:BattleCore.signatureSpec, battleStats:BattleCore.battleStats,
   battleAvatarFor,
@@ -5466,7 +5485,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     let anisotropyCap = 1;
     let disposed = false;
     const pending = [];
-    const stats = { created: 0, evicted: 0, labels: 0, decodeFailures: 0 };
+    const stats = { created: 0, evicted: 0, labels: 0, decodeFailures: 0, deferred: 0, decoded: 0 };
 
     function setAnisotropy(cap) { anisotropyCap = Math.max(1, cap | 0); }
 
@@ -5481,21 +5500,44 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     }
 
     /**
-     * Get (or create) a texture for a data-URL/asset source.
-     * Synchronous handle; upgraded when the image decodes.
+     * Get (or create) a texture handle for an asset source.
+     *
+     * Synchronous handle, upgraded in place when the image decodes, so callers
+     * never hold null and scene construction never blocks.
+     *
+     * `opts.defer` returns the handle WITHOUT starting the decode. That matters
+     * for the nineteen specimen portraits: decoding all of them while the page
+     * is still booting costs megabytes of bitmap memory and CPU time the player
+     * has not asked for yet, and only one district is on screen anyway. Call
+     * `ensure(src)` when the portrait actually needs to exist, or `prewarm()`
+     * to trickle the rest in during idle time.
      */
-    function get(src) {
+    function get(src, opts = {}) {
       if (!src) return null;
       if (disposed) return null;
       const hit = textures.get(src);
-      if (hit) { hit.hits++; promote(src); return hit.texture; }
+      if (hit) {
+        hit.hits++;
+        promote(src);
+        if (!opts.defer) ensure(src);
+        return hit.texture;
+      }
 
       const texture = placeholderTexture();
-      const record = { texture, image: null, state: 'loading', hits: 1 };
+      const record = { texture, image: null, state: opts.defer ? 'queued' : 'loading', hits: 1, src };
       textures.set(src, record);
       stats.created++;
+      if (opts.defer) stats.deferred++;
       evictIfNeeded();
+      if (!opts.defer) startDecode(src, record);
+      return texture;
+    }
 
+    /** Begin (or restart) the decode for an existing record. */
+    function startDecode(src, record) {
+      if (disposed || !record || record.state === 'loading' || record.state === 'ready') return;
+      const texture = record.texture;
+      record.state = 'loading';
       const img = new Image();
       img.decoding = 'async';
       record.image = img;
@@ -5512,6 +5554,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
         texture.anisotropy = anisotropyCap;
         texture.needsUpdate = true;
         live.state = 'ready';
+        stats.decoded++;
         pending.push(texture);
       };
       img.onerror = () => {
@@ -5520,7 +5563,45 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
         if (live) live.state = 'error';
       };
       img.src = src;
-      return texture;
+    }
+
+    /** Make sure `src` is being decoded (no-op when it already is, or is done). */
+    function ensure(src) {
+      if (!src || disposed) return null;
+      const rec = textures.get(src);
+      if (!rec) { get(src); return textures.get(src).texture; }
+      startDecode(src, rec);
+      return rec.texture;
+    }
+
+    /* ---- idle prewarm ---------------------------------------------------
+     * Walk a list of sources during idle time, a few per callback, so the
+     * critical path stays light while nothing is ever missing later. Falls
+     * back to a timer where requestIdleCallback does not exist. */
+    let prewarmHandle = 0;
+    let prewarmCancelled = false;
+    function prewarm(sources, opts2 = {}) {
+      const queue = [...new Set((sources || []).filter(Boolean))];
+      const per = Math.max(1, opts2.perCallback || 4);
+      prewarmCancelled = false;
+      const schedule = typeof requestIdleCallback === 'function'
+        ? (fn) => requestIdleCallback(fn, { timeout: 900 })
+        : (fn) => setTimeout(fn, 32);
+      const step = () => {
+        if (disposed || prewarmCancelled) return;
+        for (let i = 0; i < per && queue.length; i++) ensure(queue.shift());
+        if (queue.length) prewarmHandle = schedule(step);
+        else prewarmHandle = 0;
+      };
+      prewarmHandle = schedule(step);
+      return () => { prewarmCancelled = true; prewarmHandle = 0; };
+    }
+
+    /** Resolve when every queued decode has settled (used by tests/telemetry). */
+    function statsSnapshot() {
+      const out = { queued: 0, loading: 0, ready: 0, error: 0, evicted: 0 };
+      textures.forEach((r) => { out[r.state] = (out[r.state] || 0) + 1; });
+      return out;
     }
 
     /** Textures whose image just finished decoding; the runtime flushes this. */
@@ -5731,7 +5812,12 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
 
     function dispose() {
       disposed = true;
-      textures.forEach((rec) => rec.texture.dispose());
+      prewarmCancelled = true;
+      prewarmHandle = 0;
+      textures.forEach((rec) => {
+        if (rec.image) { rec.image.onload = null; rec.image.onerror = null; }
+        rec.texture.dispose();
+      });
       textures.clear();
       labels.forEach((t) => t.dispose());
       labels.clear();
@@ -5741,7 +5827,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     }
 
     return {
-      get, takeUpdated, label, specimenMaterial, cloneMaterialFor, setAnisotropy,
+      get, ensure, prewarm, statsSnapshot, takeUpdated, label, specimenMaterial, cloneMaterialFor, setAnisotropy,
       registerModelLoader, loadModel, report, dispose,
       get stats() { return stats; },
       get count() { return textures.size; },
@@ -6010,8 +6096,10 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     function handleRestored() {
       contextLost = false;
       // three re-uploads GPU resources on the next render; force a resize so
-      // the drawing buffer matches the element again.
+      // the drawing buffer matches the element again, and refresh the shadow
+      // map so lit geometry is not left half-shaded after the loss.
       width = height = 0;
+      renderer.shadowMap.needsUpdate = true;
       resize();
       evaluate();
       (opts.onContextRestored || (() => {}))();
@@ -7231,7 +7319,9 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       group.name = 'specimen-' + entry.id;
       root.add(group);
 
-      const portraitTex = assets.get(entry.img);
+      // Deferred: the decode starts when the form is actually in view (or on
+      // the idle prewarm pass), not while the page is still booting.
+      const portraitTex = assets.get(entry.img, { defer: true });
       const rimTex = portraitTex;
 
       // Portrait plane (canonical art, transparent).
@@ -7361,6 +7451,12 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
 
         const visualActive = dist < 52 || s.inspecting || s.selected;
         s.group.visible = visualActive;
+        // Decode the portrait only once it can plausibly be seen (or when it is
+        // selected/inspected), so nineteen portraits are not decoded at boot.
+        if (visualActive && !s.portraitReady) {
+          s.portraitReady = true;
+          assets.ensure(s.entry.img);
+        }
         if (!visualActive) {
           s.near = damp(s.near, 0, 4, dt);
           culled++;
@@ -9005,7 +9101,10 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       onContextRestored: () => toast('WebGL context restored — resuming.', 'ok'),
     });
 
-    const assets = C.createAssets(THREE, { textureBudget: 26, labelBudget: 44 });
+    // Budget covers the live working set: 19 canonical portraits + 10 arena
+    // avatars. A smaller budget made the LRU evict art that materials still
+    // referenced, forcing pointless re-uploads when districts changed.
+    const assets = C.createAssets(THREE, { textureBudget: 34, labelBudget: 44 });
     assets.setAnisotropy(Math.min(4, runtime.maxAnisotropy));
     runtime.setReducedMotion(reducedWanted());
 
@@ -9031,6 +9130,10 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
       specimens.add(e, [d.center[0] + (Math.random() - 0.5) * 20, d.center[1] + 20], { district: 'prism', line: e.line });
     }
     for (const e of adapter.entries()) specimens.setDiscovered(e.id, adapter.isDiscovered(e.id));
+
+    // Portrait decodes are deferred; trickle the rest in during idle time so the
+    // boot path stays light but nothing is ever missing when a player travels.
+    const cancelPrewarm = assets.prewarm(adapter.entries().map((e) => e.img), { perCallback: 4 });
 
     const compare = F.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
     const lab = F.createSpatialLab(THREE, { world, assets, adapter });
@@ -9743,6 +9846,7 @@ window.dispatchEvent(new CustomEvent('gaydex:app-ready',{detail:{version:window.
     function dispose() {
       if (disposed) return;
       disposed = true;
+      cancelPrewarm();
       input.dispose();
       circuitMode.dispose();
       lab.dispose();

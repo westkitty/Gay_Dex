@@ -20,6 +20,12 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 
 const HTML = readFileSync(join(ROOT, 'GayDex_Battle_Simulator_SINGLE_FILE.html'), 'utf8');
 const settle = (ms = 120) => new Promise((r) => setTimeout(r, ms));
+/** A card is "in the catalogue view" only when it is not filtered out; the grid
+ * keeps every node alive and toggles a hidden attribute, so counting nodes is
+ * not the same question as counting what the user sees. */
+const visibleCards = (doc) => [...doc.querySelectorAll('#dexGrid .card')].filter((c) => !c.hidden);
+/** Wait for the grid's one-pass-per-frame render. */
+const frame = (win) => new Promise((r) => win.requestAnimationFrame(() => setTimeout(r, 0)));
 
 function launch(seed = {}) {
   const errors = [];
@@ -108,30 +114,31 @@ test('quick filters: unobserved and favorites narrow the catalogue and recover c
   const { window } = launch({ 'gaydex-seen': JSON.stringify(['twink', 'cub']), 'gaydex-favs': JSON.stringify(['bear']) });
   await settle();
   const doc = window.document;
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 19);
+  assert.equal(visibleCards(doc).length, 19);
 
   doc.querySelector('#quickUnseen').click();
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 17, 'observed forms hidden');
+  assert.equal(visibleCards(doc).length, 17, 'observed forms hidden');
   assert.equal(doc.querySelector('#quickUnseen').getAttribute('aria-pressed'), 'true');
 
   doc.querySelector('#quickFaves').click();
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 1);
-  assert.equal(doc.querySelector('#dexGrid .card').dataset.id, 'bear');
+  assert.equal(visibleCards(doc).length, 1);
+  assert.equal(visibleCards(doc)[0].dataset.id, 'bear');
 
   // Favouriting while the favourites view is active must update it immediately.
   window.GayDexApp.selectEntry('daddy', false);
   doc.querySelector('#favBtn').click();
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 2, 'new favourite appears in the filtered view');
+  assert.equal(visibleCards(doc).length, 2, 'new favourite appears in the filtered view');
   doc.querySelector('#favBtn').click();
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 1);
+  assert.equal(visibleCards(doc).length, 1);
 
   // Empty state explains itself and offers the way back.
   doc.querySelector('#search').value = 'zzzz';
   doc.querySelector('#search').dispatchEvent(new window.Event('input', { bubbles: true }));
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 0);
+  await frame(window); // the grid renders once per frame, not once per keystroke
+  assert.equal(visibleCards(doc).length, 0);
   assert.match(doc.querySelector('#dexGrid .empty').textContent, /Nothing in the dex matches/);
-  doc.querySelector('#emptyResetBtn').click();
-  assert.equal(doc.querySelectorAll('#dexGrid .card').length, 19);
+  doc.querySelector('#dexEmpty [data-grid-reset]').click();
+  assert.equal(visibleCards(doc).length, 19);
   assert.equal(doc.querySelector('#quickAll').getAttribute('aria-pressed'), 'true');
   assert.equal(doc.querySelector('#search').value, '');
 });

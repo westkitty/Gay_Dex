@@ -105,7 +105,10 @@
       onContextRestored: () => toast('WebGL context restored — resuming.', 'ok'),
     });
 
-    const assets = C.createAssets(THREE, { textureBudget: 26, labelBudget: 44 });
+    // Budget covers the live working set: 19 canonical portraits + 10 arena
+    // avatars. A smaller budget made the LRU evict art that materials still
+    // referenced, forcing pointless re-uploads when districts changed.
+    const assets = C.createAssets(THREE, { textureBudget: 34, labelBudget: 44 });
     assets.setAnisotropy(Math.min(4, runtime.maxAnisotropy));
     runtime.setReducedMotion(reducedWanted());
 
@@ -131,6 +134,10 @@
       specimens.add(e, [d.center[0] + (Math.random() - 0.5) * 20, d.center[1] + 20], { district: 'prism', line: e.line });
     }
     for (const e of adapter.entries()) specimens.setDiscovered(e.id, adapter.isDiscovered(e.id));
+
+    // Portrait decodes are deferred; trickle the rest in during idle time so the
+    // boot path stays light but nothing is ever missing when a player travels.
+    const cancelPrewarm = assets.prewarm(adapter.entries().map((e) => e.img), { perCallback: 4 });
 
     const compare = F.createCompareRing(THREE, { world, assets, entryOf: (id) => adapter.entry(id) });
     const lab = F.createSpatialLab(THREE, { world, assets, adapter });
@@ -843,6 +850,7 @@
     function dispose() {
       if (disposed) return;
       disposed = true;
+      cancelPrewarm();
       input.dispose();
       circuitMode.dispose();
       lab.dispose();

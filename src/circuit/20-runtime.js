@@ -254,8 +254,10 @@
     function handleRestored() {
       contextLost = false;
       // three re-uploads GPU resources on the next render; force a resize so
-      // the drawing buffer matches the element again.
+      // the drawing buffer matches the element again, and refresh the shadow
+      // map so lit geometry is not left half-shaded after the loss.
       width = height = 0;
+      renderer.shadowMap.needsUpdate = true;
       resize();
       evaluate();
       (opts.onContextRestored || (() => {}))();
