@@ -3,12 +3,13 @@
  *
  * Used by `tools/split-original.mjs` (one-shot materialisation into `src/`) and
  * by `tools/build.mjs --roundtrip`, which splits into a throwaway directory and
- * re-assembles it.  Doing the roundtrip against a *fresh* split of the pristine
- * commit — rather than against the live parts — means the check stays a true
- * statement about the assembler even after `src/` has been edited.
+ * re-assembles it. Doing the roundtrip against a fresh pristine snapshot —
+ * rather than the live parts — keeps the check meaningful after `src/` changes.
+ * Shallow checkouts may not contain the pinned Git object, so the checked-in
+ * original HTML fixture is the offline fallback for the same snapshot.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const PRISTINE_COMMIT = 'cbbe7a32f557f5a4e30424b8df35a79b82a2cf6e';
@@ -16,11 +17,21 @@ export const PRISTINE_ARTIFACT = 'GayDex_Battle_Simulator_SINGLE_FILE.html';
 
 /** @returns {{file:string,content:string}[]} */
 export function splitPristine(root) {
-  const html = execFileSync('git', ['show', `${PRISTINE_COMMIT}:${PRISTINE_ARTIFACT}`], {
-    cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-  });
+  let html;
+  try {
+    html = execFileSync('git', ['show', `${PRISTINE_COMMIT}:${PRISTINE_ARTIFACT}`], {
+      cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch (error) {
+    const fixture = join(root, 'tests/fixtures/original-single-file.html');
+    if (!existsSync(fixture)) {
+      throw new Error(`cannot load pinned original from Git or fixture: ${error.message}`);
+    }
+    html = readFileSync(fixture, 'utf8');
+  }
   const L = html.split('\n');
-  // 1-indexed layout of the pristine file:
+  // 1-indexed layout of the pinned original file:
   //   1      <!doctype html>
   //   2      <html ...><head>...<title>...</title><style>
   //   3-154  CSS

@@ -8,7 +8,8 @@
  *
  * `--check` rebuilds in memory and fails if the committed artifact is stale.
  * `--roundtrip` rebuilds from the ORIGINAL parts only and verifies the
- *             extraction is byte-for-byte lossless against git history.
+ *             extraction is byte-for-byte lossless against the pinned snapshot
+ *             (loaded from Git when available, otherwise the checked-in fixture).
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -92,8 +93,8 @@ const byteLen = (str) => Buffer.byteLength(str, 'utf8');
 const args = process.argv.slice(2);
 
 if (args.includes('--roundtrip')) {
-  // Prove the assembler is lossless: split the pristine commit into a
-  // throwaway directory, re-assemble from there, compare to the pristine bytes.
+  // Prove the assembler is lossless: split the pinned original snapshot into a
+  // throwaway directory, re-assemble from there, compare to the original bytes.
   // Independent of whatever `src/` currently contains.
   const { html: original, parts: pristineParts } = splitPristine(ROOT);
   const tmp = mkdtempSync(join(tmpdir(), 'gaydex-roundtrip-'));

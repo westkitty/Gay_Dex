@@ -424,23 +424,30 @@
       $('#circuitFighterB').innerHTML = card(snap.b, 'b');
       const center = $('#circuitBattleCenter');
       if (center) {
+        const score = snap.score || { a: 0, b: 0 };
         center.innerHTML = snap.ended
-          ? `<b>${snap.winner === 'draw' ? 'DRAW' : escapeHtml(adapter.entry(snap.winner === 'a' ? snap.a.id : snap.b.id)?.name || '')} WINS</b><small>${snap.round} rounds · seed ${snap.seed}</small>`
-          : `<b>ROUND ${snap.round}</b><small>seed ${snap.seed}${snap.cpuB ? ` · CPU ${escapeHtml(snap.cpuSkill)}` : ''}</small>`;
+          ? `<b>${snap.winner === 'draw' ? 'DRAW' : escapeHtml(adapter.entry(snap.winner === 'a' ? snap.a.id : snap.b.id)?.name || '')} WINS</b><small>FINAL ${score.a}–${score.b} · ${snap.round} exchanges</small>`
+          : `<b>YOU ${score.a} — ${score.b} RIVAL</b><small>${snap.matchPoint ? 'MATCH POINT' : `EXCHANGE ${snap.round}`} · first to three${snap.cpuB ? ' · CPU intent hidden' : ''}</small>`;
       }
       const moves = $('#circuitBattleMoves');
       if (moves) {
         const KEYS = { flex: '1', serve: '2', read: '3', guard: '4', signature: '5' };
-        moves.innerHTML = ['flex', 'serve', 'read', 'guard', 'signature'].map((id) => {
+        const choices = ['flex', 'serve', 'read', 'guard', 'signature'].map((id) => {
           const m = adapter.BattleCore.BATTLE_MOVES[id];
           const sig = id === 'signature' ? adapter.BattleCore.signatureSpec({ entry: adapter.entry(snap.a.id), stats: snap.a.stats }, () => 0.35) : null;
           const label = sig ? sig.name : m.name;
           const disabled = snap.ended || (id === 'signature' && !snap.a.signatureReady);
-          return `<button type="button" class="circuit-move${id === 'signature' ? ' signature' : ''}${snap.moveA === id ? ' active' : ''}" data-move="${id}" ${disabled ? 'disabled' : ''}><strong>${escapeHtml(label)}<span>${KEYS[id]}</span></strong><small>${escapeHtml(m.hint)}</small></button>`;
-        }).join('') + `<button type="button" class="circuit-move resolve" id="circuitResolve">RESOLVE ROUND</button>
-          <button type="button" class="circuit-move ghost" id="circuitAuto">AUTO</button>
-          <button type="button" class="circuit-move ghost" id="circuitLeave">LEAVE ARENA</button>`;
-        moves.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => {
+          return `<button type="button" class="circuit-move${id === 'signature' ? ' signature' : ''}${!snap.cpuB && snap.moveA === id ? ' active' : ''}" data-move="${id}" ${disabled ? 'disabled' : ''}><strong>${escapeHtml(label)}<span>${KEYS[id]}</span></strong><small>${escapeHtml(id === 'signature' ? (snap.a.signatureReady ? 'HYPE FULL · lineage move' : `BUILD HYPE ${Math.round(snap.a.hype)}%`) : m.hint)}</small></button>`;
+        }).join('');
+        const resolve = snap.cpuB ? '' : '<button type="button" class="circuit-move resolve" id="circuitResolve">RESOLVE SANDBOX DUEL</button>';
+        moves.innerHTML = choices + resolve + '<button type="button" class="circuit-move ghost" id="circuitLeave">LEAVE ARENA</button>';
+        moves.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', async () => {
+          if (snap.cpuB && adapter.App.commitBattleMove) {
+            b.disabled = true;
+            await adapter.App.commitBattleMove(b.dataset.move);
+            renderBattleHud();
+            return;
+          }
           adapter.App.battleState.moveA = b.dataset.move;
           adapter.App.selectEntry(adapter.App.battleState.idA, false);
           const btn = document.querySelector(`[data-battle-side="a"][data-battle-move="${b.dataset.move}"]`);
@@ -449,18 +456,21 @@
         }));
         const r = $('#circuitResolve');
         if (r) r.addEventListener('click', async () => { r.disabled = true; await adapter.resolveRound(); renderBattleHud(); });
-        const a = $('#circuitAuto');
-        if (a) a.addEventListener('click', async () => { a.disabled = true; await adapter.autoBattle(); renderBattleHud(); });
         const l = $('#circuitLeave');
         if (l) l.addEventListener('click', () => exitBattle());
       }
       const bar = $('#circuitBattleBar');
       if (bar) {
-        bar.innerHTML = `<span class="circuit-chip">SEED ${snap.seed}</span><span class="circuit-chip">${escapeHtml((C.DISTRICTS[C.SCENE_TO_DISTRICT[snap.scene]] || {}).name || snap.scene)}</span>` +
-          (snap.ended ? `<button type="button" class="circuit-chip" id="circuitReportBtn">MATCH REPORT</button>` : '') +
-          `<button type="button" class="circuit-chip" id="circuitCircuitBtn">RUN CIRCUIT</button>`;
+        const score = snap.score || { a: 0, b: 0 };
+        bar.innerHTML = `<span class="circuit-chip">SCORE ${score.a}–${score.b}</span><span class="circuit-chip">${escapeHtml((C.DISTRICTS[C.SCENE_TO_DISTRICT[snap.scene]] || {}).name || snap.scene)}</span>` +
+          (snap.ended ? '<button type="button" class="circuit-chip" id="circuitRematch">REMATCH</button><button type="button" class="circuit-chip" id="circuitNewRival">NEW RIVAL</button><button type="button" class="circuit-chip" id="circuitReportBtn">ANALYSIS</button>' : '') +
+          '<button type="button" class="circuit-chip" id="circuitCircuitBtn">LINEAGE SERIES // ANALYSIS</button>';
+        const rematch = $('#circuitRematch');
+        if (rematch) rematch.addEventListener('click', () => { adapter.resetBattle(); renderBattleHud(); });
+        const newRival = $('#circuitNewRival');
+        if (newRival) newRival.addEventListener('click', () => { adapter.randomRival(); renderBattleHud(); });
         const rb = $('#circuitReportBtn');
-        if (rb) rb.addEventListener('click', () => { exitCircuit(); const el = $('#battleMatchReport'); if (el) el.scrollIntoView({ block: 'center' }); });
+        if (rb) rb.addEventListener('click', () => { exitCircuit(); const el = $('#battleAnalysisDetails'); if (el) { el.open = true; el.scrollIntoView({ block: 'center' }); } });
         const cb = $('#circuitCircuitBtn');
         if (cb) cb.addEventListener('click', () => {
           const snap2 = adapter.battleSnapshot();
