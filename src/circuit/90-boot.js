@@ -62,6 +62,9 @@
     runtime.setReducedMotion(reducedWanted());
 
     const world = C.createWorld(THREE, { assets });
+    // Mount the authored Circuit world into the renderer scene. Without this,
+    // the render loop runs against an empty scene (0 calls / 0 geometry).
+    runtime.scene.add(world.root);
 
     // Evolution geography. The pad positions are authored in C.ROUTES; the
     // forms standing on them come from the canonical lineage tables, so the
