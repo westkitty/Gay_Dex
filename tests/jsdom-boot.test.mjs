@@ -111,6 +111,20 @@ test('Circuit modules loaded and the static fallback engaged (jsdom has no WebGL
   assert.match(pill.textContent, /static fallback/);
 });
 
+test('battle-first markup has unique IDs and keeps the full GayDex below the terminal', () => {
+  const { window } = doc();
+  const d = window.document;
+  const ids = [...d.querySelectorAll('[id]')].map((el) => el.id);
+  const duplicates = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+  assert.deepEqual(duplicates, [], `duplicate IDs: ${duplicates.join(', ')}`);
+  const terminal = d.querySelector('#battleTerminal');
+  for (const id of ['battleMovesA', 'battleMovesB', 'battleAdvanced', 'battlePostMatch']) {
+    assert.ok(terminal.contains(d.getElementById(id)), `#${id} escaped the battle terminal`);
+  }
+  assert.ok(d.querySelector('main').contains(d.querySelector('#dexGrid')), 'catalog should remain available after the battle-first section');
+  assert.equal(d.title, 'GayDex: Read the Bitch');
+});
+
 test('canonical taxonomy is intact: 19 entries, 4 lineages, five stats', () => {
   const { window } = doc();
   const App = window.GayDexApp;
@@ -210,7 +224,7 @@ test('JOURNEY D — battle: the terminal initialises, resolves rounds, reports, 
   assert.ok(startHp[0] > 0 && startHp[1] > 0);
 
   // Same seed => same truth.
-  const replay = window.GayDexBattleCore.makeBattleMatch(App.entry('twunk'), App.entry('bear'), App.battleState.balanced, seed);
+  const replay = window.GayDexBattleCore.makeReadBattleMatch(App.entry('twunk'), App.entry('bear'), App.battleState.balanced, seed);
   window.GayDexBattleCore.applyBattleOpener(replay);
   for (let i = 1, g = 0; !replay.ended && g++ < 50; i++) {
     window.GayDexBattleCore.battleRound(replay, ['flex', 'serve', 'read', 'guard'][i % 4], ['serve', 'read', 'flex', 'guard'][(i + 1) % 4]);
@@ -240,6 +254,117 @@ test('JOURNEY E — CPU: trainer / rival / nemesis all produce legal moves', () 
   Core.bindContext(App.battleState);
 });
 
+test('JOURNEY F — hidden-intent CPU commits, scores the short set, rematches, and finds a new rival', async () => {
+  const { window } = doc();
+  const d = window.document;
+  const App = window.GayDexApp;
+  const Core = window.GayDexBattleCore;
+
+  assert.ok(App.setFighters('twink', 'bear'));
+  App.setCpu(true, 'trainer');
+  d.querySelector('#battleSpeed').value = '2.25';
+  d.querySelector('#battleSpeed').dispatchEvent(new window.Event('change'));
+  d.querySelector('#battleMotionMode').value = 'reduced';
+  d.querySelector('#battleMotionMode').dispatchEvent(new window.Event('change'));
+
+  const match = App.battleState.match;
+  assert.equal(match.format, 'read');
+  assert.deepEqual(JSON.parse(JSON.stringify(match.score)), { a: 0, b: 0 });
+  assert.match(d.querySelector('#battleMovesB').textContent, /INTENT HIDDEN/);
+  const circuitAdapter = window.GayDexCircuit.createAdapter(App);
+  assert.equal(circuitAdapter.battleSnapshot().format, 'read');
+  assert.deepEqual(JSON.parse(JSON.stringify(circuitAdapter.battleSnapshot().score)), { a: 0, b: 0 });
+  assert.equal(circuitAdapter.prefs.entered, false, 'first-time users should not be auto-dropped into Circuit exploration');
+
+  // During the commit delay, the player move is locked but the CPU's move is
+  // still absent from the HUD and no timeline reveal has been added.
+  const firstCommit = App.commitBattleMove('flex');
+  assert.equal(App.battleState.animating, true);
+  assert.match(d.querySelector('#battleStatus').textContent, /RIVAL INTENT SEALED/);
+  assert.match(d.querySelector('#battleMovesB').textContent, /INTENT HIDDEN/);
+  assert.equal(match.timeline.length, 0, 'CPU choice leaked before resolution');
+  assert.equal(await firstCommit, true);
+  assert.equal(match.timeline.length, 1, 'resolved exchange was not revealed');
+  assert.ok(['flex', 'serve', 'read', 'guard', 'signature'].includes(match.timeline[0].moveB));
+  assert.deepEqual([...d.querySelectorAll('#battleMovesA [data-battle-move]')].map((b) => b.dataset.battleMove), ['flex', 'serve', 'read', 'guard', 'signature'], 'Guard should be introduced after the first action');
+  assert.ok(d.querySelector('#battleTimeline').textContent.includes('EX 1'));
+
+  // Force the already-revealed CPU tell into a repeat, then verify the normal
+  // UI surfaces the lock as both a decisive read and a dedicated callout.
+  const revealed = match.timeline[0];
+  revealed.moveB = 'serve';
+  revealed.pointSide = 'b';
+  revealed.scoreA = 0;
+  revealed.scoreB = 1;
+  match.score.a = 0;
+  match.score.b = 1;
+  match.b.lastMove = 'serve';
+  match.b.history = ['serve'];
+  match.decisionRng = () => 0;
+  await App.commitBattleMove('flex');
+  assert.ok(match.timeline.at(-1).tags.includes('READ LOCK'));
+  assert.match(d.querySelector('#battleTacticalRead').textContent, /READ LOCK/);
+  assert.match(d.querySelector('#battleAnnouncer').textContent, /READ LOCK/);
+  assert.ok(d.querySelector('#battleAnnouncer').classList.contains('read-lock'), 'Read Lock callout styling was not activated');
+
+  // Follow only revealed moves, as a player can. The engine caps the set at
+  // twelve exchanges if neither three decisive reads nor a KO ends it sooner.
+  let exchanges = 0;
+  while (!match.ended && exchanges++ < Core.READ_BATTLE_MAX_EXCHANGES) {
+    const last = match.timeline.at(-1);
+    const counter = last && Core.moveThatBeats(last.moveB);
+    const move = counter || ['flex', 'serve', 'read'][exchanges % 3];
+    await App.commitBattleMove(move);
+  }
+  assert.equal(match.ended, true, 'first-to-three match did not reach a finish');
+  assert.ok(match.round <= Core.READ_BATTLE_MAX_EXCHANGES);
+  assert.ok(d.querySelector('#battlePostMatch').hidden === false, 'post-match report was not shown');
+  assert.match(d.querySelector('#battleMatchReport').textContent, /FINAL \d–\d/);
+  assert.ok(d.querySelector('#battleRematch').textContent.includes('REMATCH'));
+  const finishedSeed = match.seed;
+  const finishedRival = match.b.entry.id;
+
+  d.querySelector('#battleRematch').click();
+  const rematch = App.battleState.match;
+  assert.notEqual(rematch.seed, finishedSeed, 'rematch reused the same seeded CPU script');
+  assert.deepEqual(JSON.parse(JSON.stringify(rematch.score)), { a: 0, b: 0 });
+  assert.equal(rematch.ended, false);
+  assert.equal(d.querySelector('#battlePostMatch').hidden, true);
+
+  d.querySelector('#battleNewRival').click();
+  const fresh = App.battleState.match;
+  assert.notEqual(fresh.b.entry.id, finishedRival, 'New Rival repeated the previous opponent');
+  assert.notEqual(fresh.seed, rematch.seed, 'new rival reused the rematch seed');
+  assert.equal(fresh.b.entry.stage === 'Mega', false, 'quick rival should use the normal rival pool');
+  assert.deepEqual(JSON.parse(JSON.stringify(fresh.score)), { a: 0, b: 0 });
+
+  // Dual-control is still available, but only after deliberately opening the
+  // advanced sandbox. Both picks must be visible before manual resolution.
+  d.querySelector('#battleSettingsToggle').click();
+  assert.equal(d.querySelector('#battleAdvanced').hidden, false);
+  d.querySelector('#battleCpuB').checked = false;
+  d.querySelector('#battleCpuB').dispatchEvent(new window.Event('change'));
+  assert.equal(App.battleState.cpuB, false);
+  assert.ok(d.querySelectorAll('#battleMovesB [data-battle-move]').length >= 3);
+  assert.equal(d.querySelector('#battleResolve').hidden, false);
+  App.battleState.moveA = 'flex';
+  App.battleState.moveB = 'serve';
+  await App.resolveBattleRound();
+  assert.equal(App.battleState.match.score.a, 1, 'sandbox Resolve did not score the visible counter');
+  App.setCpu(true, 'rival');
+  assert.equal(d.querySelector('#battleResolve').hidden, true);
+  assert.match(d.querySelector('#battleMovesB').textContent, /INTENT HIDDEN/);
+  d.querySelector('#battleAdvancedClose').click();
+
+  // Leave the static app in its ordinary default profile after exercising the
+  // optional faster/reduced-motion journey.
+  d.querySelector('#battleSpeed').value = '1.5';
+  d.querySelector('#battleSpeed').dispatchEvent(new window.Event('change'));
+  d.querySelector('#battleMotionMode').value = 'auto';
+  d.querySelector('#battleMotionMode').dispatchEvent(new window.Event('change'));
+  App.setCpu(true, 'rival');
+});
+
 test('JOURNEY G — lineage series (the engine Circuit mode walks) still simulates', () => {
   const { window } = doc();
   const Core = window.GayDexBattleCore;
@@ -260,19 +385,30 @@ test('JOURNEY G — lineage series (the engine Circuit mode walks) still simulat
 test('JOURNEY I — accessibility: keyboard-only paths exist and are wired', () => {
   const { window } = doc();
   const d = window.document;
+  // Re-enter the fresh first-exchange state after the preceding full journey.
+  window.GayDexApp.resetBattle();
   // Every essential function has a focusable control.
-  for (const id of ['randomBtn', 'megaBtn', 'favBtn', 'compareBtn', 'battleResolve', 'battleAuto', 'battleReset', 'battleSeries', 'battleSwap', 'labReset', 'circuitEnterBtn', 'circuitNavToggle']) {
+  for (const id of ['randomBtn', 'megaBtn', 'favBtn', 'compareBtn', 'battleResolve', 'battleAuto', 'battleReset', 'battleSeries', 'battleSwap', 'battleRematch', 'battleNewRival', 'labReset', 'circuitEnterBtn', 'circuitNavToggle']) {
     const el = d.getElementById(id);
     assert.ok(el, `missing control #${id}`);
     assert.ok(['BUTTON', 'A', 'INPUT', 'SELECT'].includes(el.tagName), `#${id} is not focusable`);
   }
-  // Move buttons expose key shortcuts and ARIA state.
-  const moves = d.querySelectorAll('[data-battle-move]');
-  assert.ok(moves.length >= 10, 'battle move buttons not rendered');
+  // The normal CPU flow offers only the three attack reads plus the Hype
+  // signature; Guard is progressively introduced after the first action.
+  const moves = d.querySelectorAll('#battleMovesA [data-battle-move]');
+  assert.deepEqual([...moves].map((b) => b.dataset.battleMove), ['flex', 'serve', 'read', 'signature']);
+  assert.equal(d.querySelectorAll('#battleMovesB [data-battle-move]').length, 0, 'CPU intent must not be rendered as move buttons');
+  assert.match(d.querySelector('#battleMovesB').textContent, /INTENT HIDDEN/);
   for (const b of moves) {
     assert.ok(b.hasAttribute('aria-keyshortcuts'), 'move button missing aria-keyshortcuts');
     assert.ok(b.hasAttribute('aria-pressed'), 'move button missing aria-pressed');
+    assert.ok(b.getAttribute('aria-label'), 'move button missing an accessible name');
   }
+  // A battle match can be selected and played without revealing either CPU
+  // choices or analysis controls as prerequisites.
+  assert.ok(d.querySelector('#battlePlayerPick'), 'player fighter picker missing');
+  assert.equal(d.querySelector('#battleResolve').hidden, true, 'sandbox resolver should be hidden in CPU play');
+  assert.equal(d.querySelector('#battleAdvanced').hidden, true, 'advanced analysis/settings should start collapsed');
   // The Circuit index is a real <nav> of buttons, not a canvas-only affordance.
   assert.ok(d.querySelector('#circuitNavigator'), 'circuit navigator missing');
   assert.equal(d.querySelector('#circuitNavigator').tagName, 'NAV');
